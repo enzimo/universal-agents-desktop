@@ -1,6 +1,6 @@
 # Quickstart
 
-Download [Desktop 0.6.1](https://github.com/enzimo/universal-agents-desktop/releases/tag/v0.6.1) and follow the steps below. For provider signup, configuration fields, and server hosting, download [the comprehensive HTML setup guide](https://github.com/enzimo/universal-agents/releases/latest/download/setup-guide.html) and open it in your browser.
+Download [Desktop 0.6.2](https://github.com/enzimo/universal-agents-desktop/releases/tag/v0.6.2) and follow the steps below. For provider signup, configuration fields, and server hosting, download [the comprehensive HTML setup guide](https://github.com/enzimo/universal-agents/releases/latest/download/setup-guide.html) and open it in your browser.
 
 Already using a hosted service? Open its URL in your browser and sign in. You do not need local Docker or the desktop launcher; choose **Hosted server** in the guide.
 
@@ -55,7 +55,7 @@ Verify the SHA-256 checksum as the HTML guide describes, then install:
 | --- | --- |
 | macOS, Apple Silicon or Intel | Universal DMG; open it and drag Universal Agents to Applications |
 | Windows 11 x64 | Setup EXE; use the MSI if you prefer Windows Installer |
-| Ubuntu 24.04 x64 desktop | DEB; run `sudo apt install ./Universal-Agents-Desktop-0.6.1-Linux-x64.deb` |
+| Ubuntu 24.04 x64 desktop | DEB; run `sudo apt install ./Universal-Agents-Desktop-0.6.2-Linux-x64.deb` |
 
 The macOS app is ad-hoc signed and not notarized, and Windows installers are unsigned. If macOS blocks a trusted download, use **System Settings > Privacy & Security > Open Anyway**; on Windows, choose **More info** then **Run anyway**. Do not disable Gatekeeper or SmartScreen system-wide. Linux AppImage is also available; see the HTML guide for FUSE setup.
 
