@@ -22,15 +22,32 @@ function textOf(node) {
   return [node.textContent ?? "", ...(node.children ?? []).map(textOf)].join("");
 }
 
+const ALWAYS_ON_SEEN_KEY = "ua-desktop.status-window.always-on-notice-seen";
+
+// Saved launcher choices; `failRead` and `failWrite` make it throw like
+// disabled or full storage.
+function memoryStorage(entries = {}, { failRead = false, failWrite = false } = {}) {
+  const values = new Map(Object.entries(entries));
+  return {
+    values,
+    getItem(key) { if (failRead) throw new Error("storage disabled"); return values.has(key) ? values.get(key) : null; },
+    setItem(key, value) { if (failWrite) throw new Error("storage full"); values.set(key, String(value)); },
+  };
+}
+
+// Unless a test passes its own storage, the always-on notice was closed on
+// this computer before, so it stays out of the way of other checks.
 function setup(responses = {}, windowExtras = {}) {
   const elements = new Map();
   const calls = [];
   const timers = [];
   const timeouts = [];
+  const warnings = [];
   const documentListeners = {};
   let progressListener;
   const context = vm.createContext({
-    window: { ...windowExtras, __TAURI__: { event: { listen: async (name, callback) => { progressListener = callback; return () => { progressListener = undefined; }; } }, core: { invoke: async (command, args) => {
+    console: { warn: (...args) => warnings.push(args.join(" ")) },
+    window: { localStorage: memoryStorage({ [ALWAYS_ON_SEEN_KEY]: "earlier" }), ...windowExtras, __TAURI__: { event: { listen: async (name, callback) => { progressListener = callback; return () => { progressListener = undefined; }; } }, core: { invoke: async (command, args) => {
       calls.push({ command, args });
       if (responses[command]) return responses[command](args);
       if (command === "registry_access") throw new Error("Access denied");
@@ -58,7 +75,7 @@ function setup(responses = {}, windowExtras = {}) {
   context.document.querySelector("#logs-section").open = true;
   vm.runInContext(fs.readFileSync(`${__dirname}/app.js`, "utf8"), context);
   return {
-    context, elements, calls, timers, timeouts,
+    context, elements, calls, timers, timeouts, warnings,
     // Run the pending timeouts of `delay` ms, as if that time passed.
     elapse: (delay) => timeouts.filter(timeout => timeout.delay === delay).forEach(timeout => {
       timeouts.splice(timeouts.indexOf(timeout), 1);
@@ -66,7 +83,7 @@ function setup(responses = {}, windowExtras = {}) {
     }),
     progress: payload => progressListener?.({payload}),
     run: (code) => vm.runInContext(code, context),
-    key: (key) => (documentListeners.keydown || []).forEach(callback => callback({ key })),
+    key: (key, event = {}) => (documentListeners.keydown || []).forEach(callback => callback({ key, ...event })),
     text: (id) => textOf(elements.get(id)),
   };
 }
@@ -1463,6 +1480,123 @@ test("dismissing the intro does not count as seeing the Docker recovery banner",
   assert.equal(ui.elements.get(".shell").inert, false);
   ui.run("acknowledgeDockerRecovery()");
   assert.equal(ui.elements.get("#docker-banner").hidden, true);
+});
+
+// ---------- First-run notice: agents need a computer that stays on ----------
+
+const SEEN = () => memoryStorage();
+const notice = ui => ui.elements.get("#always-on-notice");
+
+test("the always-on notice shows on first run and holds the Docker dialog, badge and drawer", async () => {
+  const storage = SEEN();
+  const ui = setup({}, { localStorage: storage });
+  assert.equal(notice(ui).hidden, false);
+  assert.equal(ui.elements.get(".shell").inert, true);
+  assert.equal(ui.run("document.activeElement"), ui.elements.get("#always-on-got-it"));
+  // Docker is missing: its dialog waits, and so do the update badge and drawer.
+  ui.run('renderIntegration({workspace_available: true}); latestDockerPrerequisite = {available: false, installed: false, setup_hint: "Install Docker Desktop"}; applyDockerState(false);');
+  assert.notEqual(ui.elements.get("#docker-gate").hidden, false);
+  ui.run('applyDockerState(true); renderUpdate({desktop_version: "1.0.0", review_id: "r1", latest_version: "9.9.9", current_version: "1.0.0", releases: [], catalog: []});');
+  assert.equal(ui.elements.get("#update-badge").hidden, true);
+  ui.run("openUpdates()");
+  assert.equal(ui.elements.get("#updates-drawer").hidden, undefined);
+  ui.run("applyDockerState(false)");
+  ui.elements.get("#always-on-got-it").listeners.click();
+  assert.equal(notice(ui).hidden, true);
+  assert.ok(storage.values.has(ALWAYS_ON_SEEN_KEY));
+  // The Docker dialog that waited now shows and takes focus.
+  assert.equal(ui.elements.get("#docker-gate").hidden, false);
+  assert.equal(ui.run("document.activeElement"), ui.elements.get("#docker-install"));
+  assert.equal(ui.elements.get(".shell").inert, true);
+  assert.deepEqual(ui.warnings, []);
+});
+
+test("the always-on notice follows the intro, ignores the Escape that dismissed it, and shows once", () => {
+  const intro = fakeIntro();
+  const storage = SEEN();
+  const ui = setup({}, { UADesktopIntro: intro, localStorage: storage });
+  ui.run("applyDockerState(true)");
+  assert.notEqual(notice(ui).hidden, false);
+  intro.finish();
+  assert.equal(notice(ui).hidden, false);
+  assert.equal(ui.elements.get(".shell").inert, true);
+  // The intro marks the Escape it handled; that key must not close the notice too.
+  ui.key("Escape", { defaultPrevented: true });
+  assert.equal(notice(ui).hidden, false);
+  ui.key("Escape");
+  assert.equal(notice(ui).hidden, true);
+  assert.equal(ui.elements.get(".shell").inert, false);
+  assert.equal(ui.run("document.activeElement"), ui.elements.get("#launcher-title"));
+  // The next launch on this computer goes straight to the launcher.
+  const again = fakeIntro();
+  const next = setup({}, { UADesktopIntro: again, localStorage: storage });
+  again.finish();
+  assert.notEqual(notice(next).hidden, false);
+  assert.equal(next.elements.get(".shell").inert, false);
+});
+
+test("closing the always-on notice does not count as seeing the Docker recovery banner", () => {
+  const ui = setup({}, { localStorage: SEEN() });
+  ui.run("renderIntegration({workspace_available: true}); applyDockerState(false); applyDockerState(true);");
+  // The pointer or key that presses Got it arrives while the notice shows.
+  ui.run("acknowledgeDockerRecovery()");
+  ui.elements.get("#always-on-got-it").listeners.click();
+  assert.equal(ui.elements.get("#docker-banner").hidden, false);
+  assert.equal(ui.elements.get("#docker-banner-text").textContent, "Docker detected, good to go.");
+  ui.run("acknowledgeDockerRecovery()");
+  assert.equal(ui.elements.get("#docker-banner").hidden, true);
+});
+
+test("a reload before Got it shows the always-on notice again", () => {
+  const storage = SEEN();
+  setup({}, { localStorage: storage });
+  const ui = setup({}, { localStorage: storage });
+  assert.equal(notice(ui).hidden, false);
+  assert.equal(storage.values.has(ALWAYS_ON_SEEN_KEY), false);
+});
+
+test("unreadable storage shows the always-on notice and says why", () => {
+  const ui = setup({}, { localStorage: memoryStorage({ [ALWAYS_ON_SEEN_KEY]: "earlier" }, { failRead: true }) });
+  assert.equal(notice(ui).hidden, false);
+  assert.match(ui.warnings.join("\n"), /^ua\.desktop\.always-on-notice: .*could not be read, so it shows/m);
+});
+
+test("Got it closes the always-on notice even when storage is full, with a warning", () => {
+  const ui = setup({}, { localStorage: memoryStorage({}, { failWrite: true }) });
+  ui.run("applyDockerState(true)");
+  ui.elements.get("#always-on-got-it").listeners.click();
+  assert.equal(notice(ui).hidden, true);
+  assert.equal(ui.elements.get(".shell").inert, false);
+  assert.match(ui.warnings.join("\n"), /^ua\.desktop\.always-on-notice: .*could not be saved, so it shows again/m);
+});
+
+test("the always-on notice opens only the fixed setup guide and leaves the notice up", () => {
+  const ui = setup({ open_docker_help: () => undefined }, { localStorage: SEEN() });
+  ui.elements.get("#always-on-guide").listeners.click();
+  const opened = ui.calls.filter(call => call.command === "open_docker_help");
+  assert.equal(JSON.stringify(opened.map(call => call.args)), '[{"target":"guide"}]');
+  assert.equal(notice(ui).hidden, false);
+});
+
+test("the always-on notice names this computer's sleep setting, or keeps the general advice", async () => {
+  const ui = setup({ keep_awake_hint: () => "Open Settings > Power and turn off Automatic Suspend." }, { localStorage: SEEN() });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(ui.elements.get("#always-on-sleep-hint").textContent, "Open Settings > Power and turn off Automatic Suspend.");
+  const failed = setup({ keep_awake_hint: () => { throw new Error("no command"); } });
+  failed.elements.get("#always-on-sleep-hint").textContent = "General advice";
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(failed.elements.get("#always-on-sleep-hint").textContent, "General advice");
+  assert.match(failed.warnings.join("\n"), /^ua\.desktop\.always-on-notice: the sleep setting/m);
+});
+
+test("index.html gives the always-on notice a labelled modal dialog with Got it first", () => {
+  const html = fs.readFileSync(`${__dirname}/index.html`, "utf8");
+  const dialog = html.match(/<div id="always-on-notice"[\s\S]*?<\/div>\s*<\/div>/)?.[0] ?? "";
+  assert.match(dialog, /role="dialog" aria-modal="true"/);
+  assert.match(dialog, /aria-labelledby="always-on-title"/);
+  assert.match(dialog, / hidden>/);
+  assert.match(dialog, /24\/7/);
+  assert.ok(dialog.indexOf('id="always-on-got-it"') < dialog.indexOf('id="always-on-guide"'));
 });
 
 // ---------- Still background (vendor/metallic_mesh.js) ----------

@@ -1805,6 +1805,29 @@ body.docker-blocked .hero {
   display: none;
 }
 
+/* The first-run notice's choices, boxed like the Docker dialog's hint. */
+.modal-options {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.modal-options li {
+  padding: 11px 13px;
+  border: 1px solid var(--inner-line);
+  border-radius: var(--radius-box);
+  color: var(--muted);
+  background: var(--hint-fill);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.modal-options strong {
+  color: var(--ink);
+}
+
 .modal-actions {
   margin-top: 18px;
 }

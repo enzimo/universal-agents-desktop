@@ -10,6 +10,11 @@ const elements = {
   dockerInstall: document.querySelector("#docker-install"),
   dockerGuide: document.querySelector("#docker-guide"),
   dockerProceed: document.querySelector("#docker-proceed"),
+  alwaysOnNotice: document.querySelector("#always-on-notice"),
+  alwaysOnSleepHint: document.querySelector("#always-on-sleep-hint"),
+  alwaysOnGotIt: document.querySelector("#always-on-got-it"),
+  alwaysOnGuide: document.querySelector("#always-on-guide"),
+  launcherTitle: document.querySelector("#launcher-title"),
   shell: document.querySelector(".shell"),
   openUpdates: document.querySelector("#open-updates"),
   updatesCount: document.querySelector("#updates-count"),
@@ -188,6 +193,64 @@ function introOpen() {
   return intro?.isOpen() === true;
 }
 
+// Universal Agents runs on this computer, and agents only work while it is
+// awake. The first time the launcher shows, after the intro and before the
+// Docker dialog, a notice says so and offers the setup guide for running UA on
+// a server instead. "Got it" is kept on this computer, like the theme choice,
+// so the notice shows once. "pending" until the intro is gone, then "showing"
+// or "done".
+const ALWAYS_ON_SEEN_KEY = "ua-desktop.status-window.always-on-notice-seen";
+let alwaysOnNotice = "pending";
+
+function alwaysOnNoticeVisible() {
+  return alwaysOnNotice === "showing";
+}
+
+// Read the saved choice only once the intro is gone, so a reload shows the
+// notice again until the person closes it. Unreadable storage shows the notice:
+// repeating it is better than never telling the person.
+function showAlwaysOnNoticeIfDue() {
+  if (alwaysOnNotice !== "pending" || introOpen()) return;
+  let seen = false;
+  try {
+    seen = window.localStorage.getItem(ALWAYS_ON_SEEN_KEY) !== null;
+  } catch (error) {
+    console.warn(`ua.desktop.always-on-notice: whether the notice was seen could not be read, so it shows: ${error}`);
+  }
+  alwaysOnNotice = seen ? "done" : "showing";
+  elements.alwaysOnNotice.hidden = !alwaysOnNoticeVisible();
+  if (alwaysOnNoticeVisible()) {
+    closeUpdates({ returnFocus: false });
+    applyShellInert();
+    elements.alwaysOnGotIt.focus?.();
+  }
+}
+
+function dismissAlwaysOnNotice() {
+  if (!alwaysOnNoticeVisible()) return;
+  alwaysOnNotice = "done";
+  elements.alwaysOnNotice.hidden = true;
+  try {
+    window.localStorage.setItem(ALWAYS_ON_SEEN_KEY, new Date().toISOString());
+  } catch (error) {
+    console.warn(`ua.desktop.always-on-notice: closing the notice could not be saved, so it shows again next time: ${error}`);
+  }
+  // The Docker dialog that waited shows now and takes focus; otherwise focus
+  // goes to the launcher, which this render released from inert.
+  renderDockerGate();
+  renderUpdateBadge();
+  if (!dockerGateVisible) elements.launcherTitle.focus?.();
+}
+
+async function loadKeepAwakeHint() {
+  try {
+    elements.alwaysOnSleepHint.textContent = await invoke("keep_awake_hint");
+  } catch (error) {
+    // The general advice written in index.html stays.
+    console.warn(`ua.desktop.always-on-notice: the sleep setting for this computer could not be read: ${error}`);
+  }
+}
+
 // Marks an error written entirely by the desktop app, with no Docker or OS
 // output, so it is safe to show (ua_desktop_core::guidance::MARKER). Every
 // other error can carry raw command output and stays in the diagnostics file.
@@ -270,7 +333,7 @@ function renderDockerGate() {
   document.body.classList.toggle("docker-blocked", blocked);
   // The dialog is blocking on first detection and after a failed recovery, but
   // a Proceed click leaves the launcher usable for recovery actions.
-  const showGate = blocked && !dockerGateDismissed && !introOpen();
+  const showGate = blocked && !dockerGateDismissed && !introOpen() && !alwaysOnNoticeVisible();
   const wasHidden = elements.dockerGate.hidden;
   elements.dockerGate.hidden = !showGate;
   dockerGateVisible = showGate;
@@ -300,11 +363,13 @@ function renderDockerGate() {
 }
 
 // Make the launcher genuinely unreachable behind anything modal: while the
-// Docker dialog, the intro or the Updates drawer is open, the launcher is
-// inert, so keyboard focus cannot reach it. Proceed, dismissing the intro and
-// closing the drawer each release it.
+// Docker dialog, the always-on notice, the intro or the Updates drawer is open,
+// the launcher is inert, so keyboard focus cannot reach it. Proceed, Got it,
+// dismissing the intro and closing the drawer each release it.
 function applyShellInert() {
-  if (elements.shell) elements.shell.inert = dockerGateVisible || introOpen() || updatesOpen();
+  if (elements.shell) {
+    elements.shell.inert = dockerGateVisible || alwaysOnNoticeVisible() || introOpen() || updatesOpen();
+  }
 }
 
 // A single entry point keeps the modal, banner, and button gates consistent
@@ -333,7 +398,9 @@ function applyDockerState(available) {
 }
 
 function acknowledgeDockerRecovery() {
-  if (introOpen() || !dockerRecoveryBanner || dockerRecoveryAcknowledged) return;
+  // The banner is behind the intro or the always-on notice, so clicks and keys
+  // there do not count as seeing it.
+  if (introOpen() || alwaysOnNoticeVisible() || !dockerRecoveryBanner || dockerRecoveryAcknowledged) return;
   dockerRecoveryAcknowledged = true;
   dockerRecoveryBanner = false;
   dockerBannerText = "";
@@ -838,8 +905,12 @@ elements.autostart.addEventListener("change", async () => {
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key !== "Escape") return;
-  if (updatesOpen()) {
+  // The intro marks the Escape that dismisses it, which must not also close
+  // the notice that appears in its place.
+  if (event.key !== "Escape" || event.defaultPrevented) return;
+  if (alwaysOnNoticeVisible()) {
+    dismissAlwaysOnNotice();
+  } else if (updatesOpen()) {
     closeUpdates();
   } else if (document.body.classList.contains("logs-expanded")) {
     elements.expandLogs.click();
@@ -898,7 +969,7 @@ function updatesOpen() {
 // a clicked button, so the button itself, not the focused element, is where
 // focus returns.
 function openUpdates(event) {
-  if (updatesOpen() || introOpen() || dockerGateVisible) return;
+  if (updatesOpen() || introOpen() || dockerGateVisible || alwaysOnNoticeVisible()) return;
   drawerReturnFocus = event?.currentTarget ?? document.activeElement ?? null;
   // Opening the drawer deals with what the badge pointed to.
   badgeDone = true;
@@ -1186,7 +1257,8 @@ function renderUpdateBadge() {
     badgeKey = item.key;
     badgeDone = false;
   }
-  const show = item !== null && !badgeDone && dockerAvailable !== false && !updatesOpen() && !introOpen();
+  const show = item !== null && !badgeDone && dockerAvailable !== false && !updatesOpen() && !introOpen() &&
+    !alwaysOnNoticeVisible();
   const wasHidden = elements.updateBadge.hidden !== false;
   elements.updateBadge.hidden = !show;
   if (!show) {
@@ -1354,6 +1426,9 @@ async function downloadUpdate() {
 
 elements.dockerInstall.addEventListener("click", () => invoke("open_docker_help", { target: "install" }).catch(showError));
 elements.dockerGuide.addEventListener("click", () => invoke("open_docker_help", { target: "guide" }).catch(showError));
+elements.alwaysOnGotIt.addEventListener("click", dismissAlwaysOnNotice);
+// The same fixed guide as the Docker dialog; the renderer passes no address.
+elements.alwaysOnGuide.addEventListener("click", () => invoke("open_docker_help", { target: "guide" }).catch(showError));
 elements.dockerProceed.addEventListener("click", () => {
   // Proceeding is not a claim that Docker works: it reveals the launcher with
   // runtime controls disabled and keeps the 30-second check running.
@@ -1391,11 +1466,17 @@ elements.openLauncherDownload.addEventListener("click", () => {
 for (const type of ["pointerdown", "keydown"]) {
   document.addEventListener(type, acknowledgeDockerRecovery, { capture: true });
 }
-// Show the prerequisite dialog (or its banner) that waited for the intro.
+// Show what waited for the intro: the always-on notice first, then the
+// prerequisite dialog (or its banner).
 intro?.onDismiss(() => {
+  showAlwaysOnNoticeIfDue();
   renderDockerGate();
   renderUpdateBadge();
 });
+// Without an intro (it failed to start, or was already dismissed) the notice
+// shows at once.
+showAlwaysOnNoticeIfDue();
+loadKeepAwakeHint();
 
 elements.checkUpdates.addEventListener("click", () => {
   clearError();

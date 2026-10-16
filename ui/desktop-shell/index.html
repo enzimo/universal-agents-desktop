@@ -399,5 +399,39 @@
         </p>
       </div>
     </div>
+
+    <!-- Shown once on this computer, after the intro and before the Docker
+         dialog: agents only work while the computer running UA is awake. -->
+    <div id="always-on-notice" class="modal-backdrop" role="dialog" aria-modal="true"
+      aria-labelledby="always-on-title" aria-describedby="always-on-detail" hidden>
+      <div class="modal">
+        <p class="section-kicker">Before you start</p>
+        <h2 id="always-on-title">Agents need a computer that stays on</h2>
+        <p id="always-on-detail" class="modal-detail">
+          This app installs Universal Agents on this computer. For agents to do their tasks
+          properly, Universal Agents needs to run 24/7. While this computer sleeps, agents stop
+          working, and scheduled tasks can run late or be missed.
+        </p>
+        <ul class="modal-options">
+          <li>
+            <strong>Keep this computer awake.</strong>
+            <span id="always-on-sleep-hint">Change its power settings so it never sleeps while plugged in.</span>
+          </li>
+          <li>
+            <strong>Or run Universal Agents on a server</strong> if you are comfortable with Docker.
+            The setup guide explains how, and you then use Universal Agents in your browser.
+          </li>
+        </ul>
+        <div class="control-row modal-actions">
+          <button id="always-on-got-it" class="button button-primary" type="button" title="Close this message. It does not show again on this computer.">
+            Got it
+          </button>
+          <button id="always-on-guide" class="button button-secondary" type="button" title="Open the Universal Agents setup guide in your browser">
+            Open setup guide
+          </button>
+        </div>
+        <p class="modal-note">This message shows once on this computer.</p>
+      </div>
+    </div>
   </body>
 </html>

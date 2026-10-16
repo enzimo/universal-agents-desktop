@@ -94,7 +94,7 @@ The core leans on integration-style tests around the fake Docker command boundar
 
 The reviewed lock distinguishes onboarding `/`, chat `/webchat`, and docs `/docs/`. Health identifies onboarding for launch URL selection. After onboarding, `/` redirects to docs, so it is never used as the normal chat entry point. Read The Docs invokes a fixed desktop command; remote content cannot invoke it.
 
-The local Status page opens dark by default and offers a sun/moon theme switch whose choice is saved in the page's local storage; it does not follow the system appearance. It uses vendored UA background renderers on a still canvas that fills in once with the intro and then redraws only on resize or a theme change, and plays a vendored UA intro when the page loads (see `ui/DESIGN.md`). The hosted Web UI continues to own its own appearance.
+The local Status page opens dark by default and offers a sun/moon theme switch whose choice is saved in the page's local storage; it does not follow the system appearance. It uses vendored UA background renderers on a still canvas that fills in once with the intro and then redraws only on resize or a theme change, and plays a vendored UA intro when the page loads, followed on first run by the always-on notice (see `ui/DESIGN.md`). The hosted Web UI continues to own its own appearance.
 
 ## Independent desktop and runtime updates
 
@@ -127,6 +127,10 @@ Downloading and applying are separate steps. `download_runtime_update` validates
 The launcher treats Docker as a hard prerequisite for anything that talks to the daemon. `docker_prerequisite` is a read-only probe (`docker info` only) that distinguishes a missing CLI from a stopped daemon and returns the per-OS install page and the shared setup-guide URL from `desktop-core::platform`. It runs on a 30-second timer while Docker is missing, and never pulls, creates, or writes.
 
 On first detection the launcher shows a blocking dialog with Install Docker, Setup guide, and Proceed. Proceed is not a claim that Docker works: it reveals the launcher with a persistent amber banner ("I am still unable to detect Docker…") and disables Start, Stop, Restart, private image access, and update install. Quitting, refresh status, logs, diagnostics, docs, autostart, and recording a workspace or credential intent stay available so a user can recover. When the probe reports Docker, the banner turns green ("Docker detected, good to go.") until the first user interaction. `open_docker_help` accepts only the fixed `install` and `guide` selectors, so the renderer never supplies an arbitrary URL.
+
+## First-run always-on notice
+
+The launcher installs UA on the person's own computer, but agents only work while that computer is awake, and personal computers sleep. The first time the Status window shows, after the intro and before the Docker dialog, a notice says so. It offers two choices: keep this computer awake (the exact sleep setting comes from `keep_awake_hint`, fixed text per OS in `desktop-core::platform`, like the Docker hint), or run UA on a server with the shared setup guide (the same `open_docker_help` `guide` selector, so no new address can be opened). The notice is renderer-only state: **Got it** is saved in the page's local storage, beside the theme choice, so it shows once per computer and once after upgrading from a launcher without it. It is reminder text, not a setting, so it does not belong in `desktop-settings.json`. If storage cannot be read, the notice shows and a warning is logged.
 
 ## Host platform boundary
 

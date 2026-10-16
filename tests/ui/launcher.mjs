@@ -10,7 +10,7 @@ import { remote } from 'webdriverio';
 // It never instantiates the production controller or opens user credentials.
 const artifacts = resolve('target/ui-test-results', process.platform);
 await mkdir(artifacts, { recursive: true });
-for (const name of ['results.json', 'failure.png', 'intro.png', 'launcher.png', 'launcher-initial.png', 'launcher-light.png', 'updates-drawer.png']) {
+for (const name of ['results.json', 'failure.png', 'intro.png', 'always-on-notice.png', 'launcher.png', 'launcher-initial.png', 'launcher-light.png', 'updates-drawer.png']) {
   await rm(resolve(artifacts, name), { force: true });
 }
 const reservation = createServer();
@@ -54,6 +54,7 @@ try {
     async () => (await element(selector).getText()).includes(expected),
     { timeout: 10000, timeoutMsg: `${selector} must contain ${expected}` },
   );
+  const ALWAYS_ON_SEEN_KEY = 'ua-desktop.status-window.always-on-notice-seen';
   const shellInert = () => browser.execute(() => document.querySelector('.shell').inert);
 
   // The intro covers the launcher on every page load and blocks clicks until it
@@ -67,10 +68,25 @@ try {
     const begin = element('.ua-intro-begin');
     await begin.waitForDisplayed({ timeout: 15000, timeoutMsg: 'Click to Begin must appear once the title has formed' });
     await browser.saveScreenshot(resolve(artifacts, 'intro.png'));
+    // The fixture keeps its saved choices between runs; forget Got it so the
+    // first-run notice shows after Click to Begin.
+    await browser.execute(key => localStorage.removeItem(key), ALWAYS_ON_SEEN_KEY);
     await begin.click();
     await intro.waitForExist({ reverse: true, timeout: 5000, timeoutMsg: 'The intro must leave after Click to Begin' });
+  });
+  await check('after Click to Begin, a one-time notice says agents need a computer that stays on', async () => {
+    const notice = element('#always-on-notice');
+    await notice.waitForDisplayed({ timeout: 5000, timeoutMsg: 'The always-on notice must follow the intro on first run' });
+    assert.equal(await shellInert(), true);
+    assert.equal(await browser.execute(() => document.activeElement?.id), 'always-on-got-it');
+    assert.match(await element('#always-on-detail').getText(), /24\/7/);
+    assert.equal(await element('#always-on-sleep-hint').getText(), 'UI fixture sleep setting hint');
+    await browser.saveScreenshot(resolve(artifacts, 'always-on-notice.png'));
+    await element('#always-on-got-it').click();
+    await notice.waitForDisplayed({ reverse: true, timeout: 5000, timeoutMsg: 'Got it must close the notice' });
     assert.equal(await shellInert(), false);
     assert.equal(await browser.execute(() => document.activeElement?.id), 'launcher-title');
+    assert.notEqual(await browser.execute(key => localStorage.getItem(key), ALWAYS_ON_SEEN_KEY), null);
   });
   await waitText('#status-label', 'Stopped');
 

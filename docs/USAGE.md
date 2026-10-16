@@ -2,6 +2,10 @@
 
 Start with [Quickstart](../QUICKSTART.md) or download the [HTML setup guide](https://github.com/enzimo/universal-agents/releases/latest/download/setup-guide.html).
 
+## Keep the computer on
+
+The app runs Universal Agents on this computer, and agents only work while it is awake: while it sleeps they stop, and scheduled tasks can run late or be missed. The first time the launcher opens, after **Click to Begin**, a note says this and names the sleep setting to change on your system. Choose **Got it** to close it; it does not show again on this computer. If you are comfortable with Docker, **Open setup guide** explains how to run UA on a server instead and use it from your browser.
+
 ## Choose an agent workspace
 
 In the Status window, choose **Choose folder** under **Agent workspace** and select the project directory agents may read and change. The app mounts that folder read/write as UA's shared team folder, `team/team-shared` (`/data/workspaces/team/team-shared` inside the container). UA tells agents to use that folder when people and agents work on the same files, and everyone on your UA team can use it. Each person's private agent folder stays in app data. The app does not grant access to other personal folders.

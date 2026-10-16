@@ -16,7 +16,9 @@ Follow [QUICKSTART.md](QUICKSTART.md), or download and open the
 These installers are ad-hoc signed on macOS and unsigned on Windows, and neither
 build is notarized yet, so Gatekeeper or SmartScreen may ask you to confirm the
 first launch. The first start downloads the runtime image.
-Public downloads and images need no account; the guide includes optional private-access setup.
+The installers and runtime image are private: you need a GitHub account with access (Quickstart step 0).
+Agents only work while the computer running UA is awake, so keep it from
+sleeping, or run UA on a server with the setup guide.
 
 Desktop and runtime versions are independent. The reviewed
 [`runtime-lock.json`](runtime-lock.json) is the reviewed host contract, and [`compatible-runtimes.json`](compatible-runtimes.json) lists the UA versions and immutable image digests that implement it ([Compatibility list](docs/COMPATIBILITY_LIST.md)).

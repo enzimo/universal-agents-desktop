@@ -148,6 +148,7 @@ fn main() {
             };
             let response = match command {
                 "desktop_version" => json!(env!("CARGO_PKG_VERSION")),
+                "keep_awake_hint" => json!("UI fixture sleep setting hint"),
                 "runtime_status" | "start_runtime" | "restart_runtime" | "stop_runtime"
                 | "install_runtime_update" => json!({
                     "phase": *phase, "detail": detail,
