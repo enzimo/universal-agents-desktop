@@ -128,7 +128,10 @@ Squash merging must stay enabled in the repository settings.
   no tag to compare against. For the first release listed after that (UA
   0.9.4), compare the files in `compatibility/contract-files.txt` by hand with
   a saved copy of UA 0.9.3, then merge by hand. Later releases are compared
-  against the newly listed version again.
+  against the newly listed version again. The image package was recreated at
+  the same time, so the images for the UA 0.8.5 and 0.9.0 to 0.9.3 entries no
+  longer exist; those entries stay because the list is append-only, and only
+  UA 0.9.4 and later can be downloaded.
 - **The pull request is not from UA's release automation.** For example, a
   person edited the list or the contract file list. The check still runs and
   reports, but only a person merges.
