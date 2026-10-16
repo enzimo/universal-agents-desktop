@@ -1,8 +1,8 @@
 # Vendored Universal Agents assets
 
-These files come from Universal Agents (`enzimo/universal-agents`) so the Status window looks like current UA. UA is licensed under Apache-2.0; `LICENSE` is UA's license file, unchanged. UA has no `NOTICE` file at this commit, so none is carried.
+These files come from Universal Agents (`enzimo/universal-agents`) so the Status window looks like current UA. UA is licensed under Apache-2.0; `LICENSE` is UA's license file, unchanged. UA has no `NOTICE` file at this tag, so none is carried.
 
-Source: UA `main` at commit `970a023b5f097367b481f182402ed94a84673e44` (2026-10-12, the merge of pull request #170). All six files are byte-identical to that commit. Five are unchanged since `e68f142f` (2026-10-10), the commit first vendored. `intro_word.js` gained two fixes. #164 draws the settled facets of letters still forming on their own canvas (`ua-intro-word-settled`), so a letter no longer shows a flickering outline before it has formed. `../styles.css` positions that canvas like the other title layers, as UA's `styles.css` does.
+Source: UA tag `v0.9.4`. All six files are byte-identical to that tag. (They were first copied from UA `main` on 2026-10-10 and last updated on 2026-10-12; UA's repository was recreated in October 2026 without its old history, so those commits no longer exist.) `intro_word.js` gained two fixes since the first copy. The first draws the settled facets of letters still forming on their own canvas (`ua-intro-word-settled`), so a letter no longer shows a flickering outline before it has formed. `../styles.css` positions that canvas like the other title layers, as UA's `styles.css` does.
 
 | File | UA source path | Changes |
 | --- | --- | --- |
@@ -15,7 +15,7 @@ Source: UA `main` at commit `970a023b5f097367b481f182402ed94a84673e44` (2026-10-
 
 Every vendored file is byte-identical to UA. Desktop adaptations live in desktop-owned files, so re-vendoring is a copy followed by a review of the items below.
 
-#170 gives the two blurred title layers (the slab and the turning triangles) a transparent margin of three blur radii. WebKit repaints only a canvas's own box when its drawing changes, so the part of a CSS blur that spread past the box stayed on screen as a faint shadow framing the word after the slab had dissolved.
+The second gives the two blurred title layers (the slab and the turning triangles) a transparent margin of three blur radii. WebKit repaints only a canvas's own box when its drawing changes, so the part of a CSS blur that spread past the box stayed on screen as a faint shadow framing the word after the slab had dissolved.
 
 ## How the desktop uses them
 
