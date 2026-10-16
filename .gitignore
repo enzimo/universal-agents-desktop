@@ -13,3 +13,6 @@
 /src-tauri/gen/
 **deleteme
 __pycache__/
+
+# Lists of real values to search for stay outside Git (see CONTRIBUTING.md).
+LOCAL-ONLY*
