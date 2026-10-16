@@ -17,9 +17,9 @@ how subscription logins are imported and tested.
   "schema_version": 1,
   "runtimes": [
     {
-      "ua_version": "0.8.5",
+      "ua_version": "0.9.4",
       "host_contract_version": 3,
-      "image": "ghcr.io/enzimo/universal-agents@sha256:d5d4...0197"
+      "image": "ghcr.io/enzimo/universal-agents@sha256:e138...0131"
     }
   ]
 }
@@ -36,6 +36,10 @@ Rules, all enforced by the check below:
   `@sha256:` and 64 lowercase hex digits. Tags such as `:0.9.0` are not allowed.
 - Entries are in ascending version order, with no repeated version or image.
 - The list is append-only: existing entries never change, move or disappear.
+  The one exception is an entry whose image no longer exists in the registry,
+  because the launcher could offer it but never download it. A person removes
+  such entries in a reviewed pull request and merges it by hand, since the
+  check rejects the removal.
 - The file is 2-space indented JSON with one trailing newline, exactly as
   Python's `json.dumps(document, indent=2) + "\n"` writes it. One fixed layout
   keeps every change a pure append in the diff.
@@ -129,9 +133,9 @@ Squash merging must stay enabled in the repository settings.
   0.9.4), compare the files in `compatibility/contract-files.txt` by hand with
   a saved copy of UA 0.9.3, then merge by hand. Later releases are compared
   against the newly listed version again. The image package was recreated at
-  the same time, so the images for the UA 0.8.5 and 0.9.0 to 0.9.3 entries no
-  longer exist; those entries stay because the list is append-only, and only
-  UA 0.9.4 and later can be downloaded.
+  the same time, so the images for UA 0.8.5 and 0.9.0 to 0.9.3 no longer
+  exist. Those entries were removed under the exception above, and UA 0.9.4 is
+  now the oldest listed version.
 - **The pull request is not from UA's release automation.** For example, a
   person edited the list or the contract file list. The check still runs and
   reports, but only a person merges.
@@ -145,6 +149,13 @@ If the launcher starts depending on another UA file, add it to
 | --- | --- | --- |
 | `UA_READ_TOKEN` | this repository | Lets the check read UA. Use a fine-grained personal access token whose resource owner is `enzimo`, limited to `enzimo/universal-agents`, with repository permission **Contents: Read-only**. GitHub adds **Metadata: Read-only** automatically. Contents covers file contents, tags, releases and release asset downloads, so no other permission is needed. |
 | `DESKTOP_COMPATIBILITY_TOKEN` | `enzimo/universal-agents` | Lets UA's release workflow push a `ua-release/` branch here and open the pull request. It needs **Contents: Read and write** and **Pull requests: Read and write** on `enzimo/universal-agents-desktop`. It is maintained with UA's release workflow. |
+
+Both are GitHub Actions secrets: encrypted values stored in each repository's
+**Settings → Secrets and variables → Actions**, never files in a repository.
+Workflows can read them; nobody can view them after saving. They are needed
+because a workflow's built-in token can only reach its own repository. Both
+are optional. Without them, a maintainer adds each UA release by hand: run
+UA's `scripts/propose_desktop_compatibility.py`, then the local check below.
 
 If `UA_READ_TOKEN` is missing, the check job fails with a message naming it.
 Fine-grained tokens expire. When one does, the check fails at the UA access step

@@ -20,8 +20,8 @@ registration instead of installing global emulation handlers each time.
 
 ## Host requirements
 
-Use an organization runner group restricted to these two private repositories.
-Fork pull requests are excluded. Assign the custom labels only after installing
+Use an organization runner group open to all of the organization's private
+repositories and closed to public ones. Fork pull requests are excluded. Assign the custom labels only after installing
 the cleanup hooks. Each runner process needs its own application, work, hook,
 and state directories. Do not share a work directory or tool cache between
 runner processes. Keep the native Windows runner in the signed-in account so
@@ -212,8 +212,9 @@ keep the Windows disk reserve check enabled between maintenance windows.
 
 ## Activated runners
 
-The organization runner group `Universal Agents` is restricted to these two
-repositories. Three runners, one each for Windows, macOS and Linux (WSL), use
+The organization runner group `Universal Agents` is open to every private
+repository in the organization and closed to public repositories, so a
+stranger's pull request to a public repository can never run on these hosts. Three runners, one each for Windows, macOS and Linux (WSL), use
 the reviewed labels and installed cleanup hooks. A maintainer administers them
 through a delegated runner role while their base organization membership
 remains `member`. Keep each host's runner names, accounts and folders in that
