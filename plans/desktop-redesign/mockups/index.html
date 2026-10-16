@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Launcher redesign mockups</title>
+    <link rel="stylesheet" href="../../../ui/desktop-shell/vendor/ua-runtime-theme.css" />
+    <link rel="stylesheet" href="../../../ui/desktop-shell/styles.css" />
+    <link rel="stylesheet" href="mockups.css" />
+    <script src="../../../ui/desktop-shell/theme.js"></script>
+    <script src="../../../ui/desktop-shell/vendor/static-mesh.js" defer></script>
+    <script src="../../../ui/desktop-shell/vendor/metallic_mesh.js" defer></script>
+    <style>
+      body { padding-bottom: 40px; }
+      .i-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: 16px; }
+      .i-card { display: grid; gap: 8px; align-content: start; color: var(--ink); text-decoration: none; border-radius: var(--radius-group); }
+      .i-card:hover { border-color: var(--control-hover-border); }
+      .i-card h2 { font-size: 19px; }
+      .i-card ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13.5px; line-height: 1.55; }
+      .i-shared { margin-top: 14px; border-radius: var(--radius-group); }
+      .i-shared ul { margin: 6px 0 0; padding-left: 18px; font-size: 13.5px; line-height: 1.6; }
+      @media (max-width: 900px) { .i-grid { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <canvas class="ua-doc-static-mesh" data-ua-metallic-mesh aria-hidden="true"></canvas>
+    <div class="mesh-scrim" aria-hidden="true"></div>
+    <main class="m-shell">
+      <section class="m-pane m-rounded">
+        <p class="m-kicker">Universal Agents Desktop · redesign</p>
+        <h1>Four layout concepts</h1>
+        <p class="m-muted" style="margin:8px 0 0">Mockups only: buttons don't do anything except the mockup bar at the bottom of each page, the confirmation dialogs and the theme switch. They use the app's real colors, buttons and background.</p>
+      </section>
+
+      <section class="m-pane i-shared">
+        <h2>What every concept fixes</h2>
+        <ul>
+          <li><b>UA version choice:</b> the last five UA releases are always listed, each saying whether it works with this launcher and whether it's already downloaded, with Download and Switch. Pre-release and unchecked versions appear only when you ask for them.</li>
+          <li><b>No dead ends:</b> an available update never lives only in a notification. The version list (or the Updates button) always shows the next step.</li>
+          <li><b>Launcher self-update:</b> a floating badge, Available → Downloading → Restart launcher. UA keeps running while the launcher restarts.</li>
+          <li><b>Header alignment:</b> one row, one Start / Restart / Stop group, status and theme at the same height. Progress is a thin bar under the header, so buttons don't jump.</li>
+        </ul>
+      </section>
+
+      <div class="i-grid">
+        <a class="m-pane i-card" href="a-home-versions.html">
+          <p class="m-kicker">Concept A</p>
+          <h2>Home with a version list</h2>
+          <ul>
+            <li>Today's layout, reorganized. Status and Open on the left, <b>Choose which UA runs</b> on the right.</li>
+            <li>Access, logs and settings become summary cards.</li>
+            <li>Smallest change to build.</li>
+          </ul>
+        </a>
+        <a class="m-pane i-card" href="b-sidebar.html">
+          <p class="m-kicker">Concept B</p>
+          <h2>Sidebar with a Versions page</h2>
+          <ul>
+            <li>Sections: Home, Versions, Access, Logs, Settings.</li>
+            <li>One page holds both the launcher update and a UA version table.</li>
+            <li>Scales best as the launcher grows. One extra click to reach anything.</li>
+          </ul>
+        </a>
+        <a class="m-pane i-card" href="c-compact.html">
+          <p class="m-kicker">Concept C</p>
+          <h2>Compact window with a version picker</h2>
+          <ul>
+            <li>A small window: status, Open, version, Start / Restart / Stop.</li>
+            <li>The version opens a picker sheet with the last five releases.</li>
+            <li>Least intimidating. Logs and access move behind links.</li>
+          </ul>
+        </a>
+        <a class="m-pane i-card" href="d-update-center.html">
+          <p class="m-kicker">Concept D</p>
+          <h2>Update center drawer</h2>
+          <ul>
+            <li>Home stays about your team. An Updates drawer shows each update as a checklist with the next step.</li>
+            <li>Other versions are listed at the bottom of the drawer.</li>
+            <li>Very clear steps, but versions are hidden until you open it.</li>
+          </ul>
+        </a>
+      </div>
+    </main>
+  </body>
+</html>

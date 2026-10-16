@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Universal Agents Launcher</title>
+    <link rel="stylesheet" href="vendor/ua-runtime-theme.css" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="theme.js"></script>
+    <script src="vendor/static-mesh.js" defer></script>
+    <script src="vendor/metallic_mesh.js" defer></script>
+    <script src="vendor/ui_motion.js" defer></script>
+    <script src="vendor/glass_mesh.js" defer></script>
+    <script src="vendor/intro_word.js" defer></script>
+    <script src="app.js" type="module"></script>
+  </head>
+  <body>
+    <canvas class="ua-doc-static-mesh" data-ua-metallic-mesh aria-hidden="true"></canvas>
+    <div class="mesh-scrim" aria-hidden="true"></div>
+    <!-- Runs before the launcher is parsed so the intro covers it from the first frame. -->
+    <script src="intro.js"></script>
+    <main class="shell">
+      <header class="topbar">
+        <div class="brand">
+          <button id="open-ua-repository" class="brand-link" type="button"
+            aria-label="Open Universal Agents on GitHub" title="Open the Universal Agents project on GitHub in your browser">
+            <img class="brand-mark" src="agent-mark.png" alt="" />
+          </button>
+          <div>
+            <div class="title-row">
+              <h1 id="launcher-title" tabindex="-1" data-intro-focus>Universal Agents Launcher</h1>
+              <!-- The state as a coloured word; renderStatus sets its class. -->
+              <span id="status-pill" class="status-text status-neutral" role="status"><span id="status-label">Checking…</span></span>
+            </div>
+            <p class="version-chips">
+              <span class="version-chip">Launcher <span id="desktop-version">…</span></span>
+              <span class="version-chip">UA <span id="header-runtime-version">…</span></span>
+            </p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button id="open-updates" class="button button-secondary header-control" type="button"
+            aria-haspopup="dialog" aria-controls="updates-drawer" title="See launcher and Universal Agents updates">
+            Updates <span id="updates-count" class="count-badge" hidden></span>
+          </button>
+          <div class="segmented" role="group" aria-label="Runtime controls">
+            <button id="start-runtime" class="button button-primary header-control" type="button" disabled
+              title="Start Universal Agents" data-install-title="Download and start Universal Agents">Start</button>
+            <button id="restart-runtime" class="button button-secondary header-control" type="button" disabled
+              title="Restart Universal Agents. Work in progress is interrupted; your workspace and data stay.">Restart</button>
+            <button id="stop-runtime" class="button button-danger header-control" type="button" disabled
+              title="Stop Universal Agents. Your workspace and data stay.">Stop</button>
+          </div>
+          <div class="segmented" role="group" aria-label="Leave the launcher">
+            <button id="quit-desktop-app" class="button button-secondary header-control" type="button"
+              title="Quit the launcher only. Universal Agents keeps running in the background; open the launcher again to manage it.">Close</button>
+            <button id="stop-runtime-and-quit" class="button button-danger header-control" type="button"
+              title="Stop Universal Agents, then quit the launcher. Your workspace and data stay.">
+              <span class="button-spinner" aria-hidden="true"></span>
+              <span id="stop-and-quit-label">Quit</span>
+            </button>
+          </div>
+          <!-- Shows the sun in dark mode and the moon in light mode; theme.js sets the label. -->
+          <button id="theme-toggle" class="icon-button theme-toggle header-control" type="button" data-theme-toggle
+            aria-label="Switch to light theme" title="Switch to light theme">
+            <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <circle cx="12" cy="12" r="4.25" />
+              <path d="M12 2.5v2.25M12 19.25v2.25M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.25M19.25 12h2.25M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6" />
+            </svg>
+            <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M20.25 14.6A8.25 8.25 0 0 1 9.4 3.75a8.25 8.25 0 1 0 10.85 10.85z" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- One progress row for installs, sign-in, restarts and updates, so the
+           header buttons never move. -->
+      <div id="operation-progress" class="operation-progress" hidden>
+        <progress id="operation-bar" aria-label="Runtime operation progress"></progress>
+        <p id="operation-detail" role="status" aria-live="polite"></p>
+      </div>
+
+      <div id="docker-banner" class="banner banner-warning" role="status" aria-live="polite" hidden>
+        <span class="banner-icon" aria-hidden="true"></span>
+        <span id="docker-banner-text"></span>
+      </div>
+
+      <div class="launch-grid">
+      <section class="hero panel" aria-labelledby="runtime-title">
+        <div class="hero-copy">
+          <p class="section-kicker">Local runtime</p>
+          <h2 id="runtime-title">Let's launch your local team!</h2>
+          <p id="status-detail" class="status-detail">
+            Checking Docker and the Universal Agents runtime.
+          </p>
+        </div>
+        <div class="primary-actions">
+          <button id="open-app" class="button button-primary" type="button" disabled
+            title="Open the Web Chat in a launcher window">
+            Open in app
+          </button>
+          <button id="open-browser" class="button button-secondary" type="button" disabled
+            title="Open the Web Chat in your default browser">
+            Open in browser
+          </button>
+          <a id="read-docs" class="docs-link" href="#" title="Open the Universal Agents documentation in your browser">Read The Docs</a>
+        </div>
+      </section>
+
+      <section class="panel workspace-card" aria-labelledby="workspace-title">
+        <div class="access-heading">
+          <div>
+            <p class="section-kicker">Shared folder</p>
+            <h2 id="workspace-title">Agent Workspace</h2>
+            <p>Choose the project folder agents may read and change.</p>
+          </div>
+          <span id="workspace-badge" class="mini-badge">App workspace</span>
+        </div>
+        <code id="workspace-dir" class="path-value">—</code>
+        <p class="access-detail">
+          Agents use this folder as the team's shared folder, <code>team/team-shared</code>, and can
+          read and change it. Everyone on your Universal Agents team can use it. No other
+          personal folders are added to the container.
+        </p>
+        <p id="workspace-warning" class="access-warning" role="alert" hidden></p>
+        <div class="control-row">
+          <button id="choose-workspace" class="button button-secondary" type="button"
+            title="Choose the folder agents use as the team's shared folder. Universal Agents restarts to use it.">
+            Choose folder
+          </button>
+          <button id="open-workspace-folder" class="button button-quiet" type="button"
+            title="Show the shared folder in your file manager">
+            Open folder
+          </button>
+          <button id="use-internal-workspace" class="button button-quiet" type="button" hidden
+            title="Go back to the folder inside the app's data. Universal Agents restarts to use it.">
+            Use app workspace
+          </button>
+        </div>
+      </section>
+      </div>
+
+      <div id="notice" class="notice" role="alert" hidden></div>
+
+      <section class="panel advanced-card" aria-labelledby="advanced-title">
+        <h2 id="advanced-title">Advanced Settings</h2>
+        <div class="advanced-grid">
+          <details class="advanced-item collapsible" id="registry-access">
+            <summary id="registry-title"><span>Private Image Access</span></summary>
+            <div class="advanced-content">
+            <p class="access-detail">Private GHCR images need a GitHub account with package access.
+              Sign-in replaces Docker's saved GHCR account for other Docker clients too.
+              Credentials stay in Docker's configured credential helper, outside UA.</p>
+            <p id="registry-detail" class="access-detail" role="status">Already signed into Docker? Verify access and retry.</p>
+            <div class="control-row">
+              <button id="registry-existing" class="button button-primary" type="button" title="Check that Docker's saved sign-in can download the Universal Agents image, then start it">Verify access and retry</button>
+              <button id="registry-gh" class="button button-secondary" type="button" title="Sign Docker in with your GitHub CLI account, then start Universal Agents">Use GitHub CLI</button>
+              <button id="registry-login" class="button button-quiet" type="button" title="Open a terminal to sign in to GitHub in your browser; installation continues afterwards">Sign in with gh</button>
+            </div>
+            <p class="access-detail">Sign in with gh opens a terminal for GitHub's browser login. Complete it and installation continues automatically.
+              For multiple accounts, select the account in gh first.</p>
+            <details class="auth-help">
+              <summary>Use a personal access token instead</summary>
+              <p>Use a classic PAT with read:packages and access to the private package. Your organization may also require SSO authorization.</p>
+              <form id="registry-form" class="registry-form">
+                <label for="registry-user">GitHub username</label>
+                <input id="registry-user" autocomplete="username" required maxlength="39" />
+                <label for="registry-token">Classic personal access token</label>
+                <input id="registry-token" type="password" autocomplete="off" spellcheck="false" required maxlength="4096" />
+                <button id="registry-pat" class="button button-primary" type="submit" title="Sign Docker in with this username and token, then start Universal Agents">Sign in and retry</button>
+              </form>
+            </details>
+            </div>
+          </details>
+
+          <details class="advanced-item collapsible" id="subscription-access">
+            <!-- The state tag stays in the title line so it shows while collapsed. -->
+            <summary><span>OpenAI Subscription (optional)</span><span id="subscription-badge" class="mini-badge">Not connected</span></summary>
+            <div class="advanced-content">
+            <p class="access-detail">Import a file-backed Codex login into UA's protected credential store. UA works without it.</p>
+            <p id="subscription-detail" class="access-detail">Checking subscription access.</p>
+            <p id="auth-source-row" class="source-row" hidden>
+              Import source: <code id="auth-source">—</code>
+            </p>
+            <p id="auth-warning" class="access-warning" role="alert" hidden></p>
+            <div class="control-row">
+              <button id="connect-subscription" class="button button-secondary" type="button"
+                title="Choose a Codex auth.json file to import your OpenAI subscription">
+                Choose auth.json
+              </button>
+              <button id="finish-subscription" class="button button-primary" type="button" hidden
+                title="Import the chosen auth.json into Universal Agents now">
+                Finish import
+              </button>
+              <button id="cancel-subscription" class="button button-quiet" type="button" hidden
+                title="Forget the chosen auth.json without importing it">
+                Cancel pending import
+              </button>
+            </div>
+            <details class="auth-help">
+              <summary>No auth.json?</summary>
+              <p>
+                In your terminal, create a file-backed Codex login with
+                <code>codex login --device-auth -c 'cli_auth_credentials_store="file"'</code>, then
+                choose <code>~/.codex/auth.json</code> here.
+              </p>
+            </details>
+            </div>
+          </details>
+
+          <!-- Logs refresh only while this section is open. Its tools sit on the
+               title row (placed there by CSS, because a summary must not
+               contain buttons). -->
+          <details class="advanced-item advanced-wide collapsible" id="logs-section">
+            <summary><span>Recent Runtime Logs</span><span id="logs-state" class="mini-badge badge-running">Live</span></summary>
+            <div class="advanced-content">
+              <div class="logs-toolbar">
+                <label class="log-lines" for="log-lines">Lines
+                  <input id="log-lines" type="number" min="10" max="5000" step="10" value="250" inputmode="numeric"
+                    title="How many of the newest log lines to show (10 to 5000)" />
+                </label>
+                <!-- Pause while live, play while paused; the label says what a press does. -->
+                <button id="toggle-log-refresh" class="icon-button" type="button"
+                  aria-label="Pause log refresh" title="Pause log refresh">
+                  <svg class="tool-icon icon-pause" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 6v12M15 6v12" /></svg>
+                  <svg class="tool-icon icon-play" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 5.5v13l10.5-6.5z" /></svg>
+                </button>
+                <button id="expand-logs" class="icon-button" type="button" aria-controls="logs"
+                  aria-expanded="false" aria-label="Expand logs" title="Expand logs">
+                  <svg class="tool-icon icon-expand" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" /></svg>
+                  <svg class="tool-icon icon-collapse" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19 10h-5V5M5 14h5v5M14 10l6-6M10 14l-6 6" /></svg>
+                </button>
+                <button id="download-diagnostics" class="icon-button" type="button"
+                  aria-label="Download diagnostics" title="Save status, desktop logs and runtime logs to a text file for troubleshooting">
+                  <svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 4v11M7 10.5l5 5 5-5M5 19.5h14" /></svg>
+                </button>
+              </div>
+              <pre id="logs" tabindex="0">Logs will appear after the runtime starts.</pre>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <details class="panel settings-card collapsible" id="controls-section" open>
+        <summary class="pane-summary"><span id="settings-title">Controls</span></summary>
+        <div class="settings-content">
+        <div class="settings-grid">
+          <dl class="facts">
+            <div>
+              <dt>UA runtime</dt>
+              <dd id="runtime-version">—</dd>
+            </div>
+            <div>
+              <dt>Web address</dt>
+              <dd id="web-url">—</dd>
+            </div>
+            <div>
+              <dt>Persistent data</dt>
+              <dd id="data-dir">—</dd>
+            </div>
+          </dl>
+          <div class="settings-switches">
+            <label class="toggle-row" for="autostart">
+              <span>
+                <strong>Start at login</strong>
+                <small>Launch the desktop host in the background when you sign in.</small>
+              </span>
+              <input id="autostart" type="checkbox" role="switch" />
+            </label>
+            <label class="toggle-row" for="refresh-external-skills">
+              <span>
+                <strong>Refresh external skills on start</strong>
+                <small>Pull the latest skills from the repositories approved during setup whenever UA starts or restarts. The next start applies this change.</small>
+              </span>
+              <input id="refresh-external-skills" type="checkbox" role="switch" />
+            </label>
+          </div>
+        </div>
+      </div>
+      </details>
+
+    </main>
+
+    <!-- The most useful update item. It hides after 5 seconds or when dismissed,
+         and shows again when the update moves to its next stage. -->
+    <div id="update-badge" class="update-badge" hidden>
+      <button id="update-badge-open" class="update-badge-open" type="button" aria-haspopup="dialog"
+        aria-controls="updates-drawer" title="Open Updates">
+        <span id="update-badge-ring" class="update-badge-ring" aria-hidden="true"></span>
+        <span class="update-badge-copy">
+          <strong id="update-badge-label"></strong>
+          <small id="update-badge-detail"></small>
+        </span>
+      </button>
+      <button id="update-badge-dismiss" class="update-badge-dismiss" type="button" aria-label="Dismiss update notice" title="Hide this notice. The Updates button still shows what is waiting.">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 7l10 10M17 7L7 17" /></svg>
+      </button>
+    </div>
+
+    <div id="updates-drawer" class="drawer-backdrop" hidden>
+      <aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="updates-title">
+        <header class="drawer-header">
+          <div>
+            <p class="section-kicker">Update center</p>
+            <h2 id="updates-title" tabindex="-1">Updates</h2>
+          </div>
+          <button id="check-updates" class="button button-quiet button-compact" type="button"
+            title="Check GitHub for new launcher and Universal Agents releases">Check now</button>
+          <button id="close-updates" class="icon-button drawer-close" type="button" aria-label="Close updates" title="Close updates">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
+        </header>
+        <p id="update-checked" class="drawer-note">Not checked yet.</p>
+        <p class="drawer-note">Downloads never restart anything. Each restart waits for you.</p>
+        <div id="drawer-notice" class="notice" role="alert" hidden></div>
+
+        <section class="lane" aria-labelledby="launcher-lane-title">
+          <div class="lane-heading">
+            <h3 id="launcher-lane-title">Desktop launcher</h3>
+            <span id="launcher-lane-versions" class="from-to"></span>
+          </div>
+          <p id="launcher-status" class="lane-status" role="status">Checking for a newer launcher…</p>
+          <ol id="launcher-steps" class="steps" hidden></ol>
+          <div class="lane-actions" id="launcher-actions" hidden>
+            <button id="open-launcher-download" class="button button-primary button-compact" type="button"
+              title="Open this launcher release on GitHub in your browser to download its installer">Open download page</button>
+          </div>
+        </section>
+
+        <section class="lane" aria-labelledby="runtime-lane-title">
+          <div class="lane-heading">
+            <h3 id="runtime-lane-title">Universal Agents</h3>
+            <span id="runtime-lane-versions" class="from-to"></span>
+          </div>
+          <p id="update-status" class="lane-status" role="status">Checking for new UA releases…</p>
+          <p id="update-warning" class="lane-warning" hidden></p>
+          <p id="update-note" class="lane-note" hidden></p>
+          <ol id="runtime-steps" class="steps" hidden></ol>
+          <div id="update-review" class="review" hidden>
+            <!-- Collapsed for each new review so the lane stays short; the
+                 acknowledgment below still asks the reader to open them. -->
+            <details id="update-notes-section" class="collapsible review-notes">
+              <summary><span>Release notes</span></summary>
+              <pre id="update-notes" class="release-notes" tabindex="0"></pre>
+            </details>
+            <label class="toggle-row update-ack" for="update-ack">
+              <span>I reviewed the release notes and migration instructions and am ready to restart UA.</span>
+              <input id="update-ack" type="checkbox" role="switch" />
+            </label>
+          </div>
+          <div id="runtime-actions" class="lane-actions" hidden>
+            <button id="download-update" class="button button-secondary button-compact" type="button"
+              title="Download this version in the background. Universal Agents keeps running.">Download</button>
+            <button id="install-update" class="button button-primary button-compact" type="button" disabled
+              title="Restart Universal Agents on this version. Work in progress is interrupted; your workspace and data stay.">Switch and restart</button>
+          </div>
+
+          <div id="other-versions" class="other-versions">
+            <h4>Other versions</h4>
+            <p id="catalog-note" class="lane-note">Recent versions appear after a check.</p>
+            <ul id="runtime-catalog" class="catalog"></ul>
+            <label class="toggle-row" for="offer-unlisted-runtimes">
+              <span>
+                <strong>Offer pre-release and unchecked versions</strong>
+                <small>Also offer UA betas, nightly builds, and releases not yet confirmed to work with this launcher. They may not start, and data they change may not work with older UA versions.</small>
+              </span>
+              <input id="offer-unlisted-runtimes" type="checkbox" role="switch" />
+            </label>
+          </div>
+        </section>
+      </aside>
+    </div>
+
+    <div id="docker-gate" class="modal-backdrop" role="dialog" aria-modal="true"
+      aria-labelledby="docker-gate-title" aria-describedby="docker-gate-detail" hidden>
+      <div class="modal">
+        <p class="section-kicker">Prerequisite</p>
+        <h2 id="docker-gate-title">Docker is required</h2>
+        <p id="docker-gate-detail" class="modal-detail">
+          Universal Agents runs in a local Docker container. I could not reach Docker on this
+          computer.
+        </p>
+        <p id="docker-gate-hint" class="modal-hint"></p>
+        <div class="control-row modal-actions">
+          <button id="docker-install" class="button button-primary" type="button" title="Open Docker's install page in your browser">
+            Install Docker
+          </button>
+          <button id="docker-guide" class="button button-secondary" type="button" title="Open the Universal Agents setup guide in your browser">
+            Setup guide
+          </button>
+          <button id="docker-proceed" class="button button-quiet" type="button" title="Use the launcher without Docker for now. It checks for Docker every 30 seconds.">
+            Proceed
+          </button>
+        </div>
+        <p class="modal-note">
+          Proceeding opens the launcher with controls disabled. I keep checking in the background
+          and turn them back on as soon as Docker answers.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

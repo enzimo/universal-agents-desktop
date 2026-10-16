@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Concept A: Home with a version list</title>
+    <link rel="stylesheet" href="../../../ui/desktop-shell/vendor/ua-runtime-theme.css" />
+    <link rel="stylesheet" href="../../../ui/desktop-shell/styles.css" />
+    <link rel="stylesheet" href="mockups.css" />
+    <script src="../../../ui/desktop-shell/theme.js"></script>
+    <script src="../../../ui/desktop-shell/vendor/static-mesh.js" defer></script>
+    <script src="../../../ui/desktop-shell/vendor/metallic_mesh.js" defer></script>
+    <script src="mockups.js" defer></script>
+    <style>
+      .a-grid { display: grid; grid-template-columns: 1fr 1.15fr; }
+      .a-grid > .m-pane + .m-pane { border-left: 0; }
+      .a-hero h2 { font-size: 24px; margin: 2px 0 8px; }
+      .a-facts { display: grid; gap: 8px; margin: 18px 0 0; }
+      .a-facts div { display: grid; grid-template-columns: 120px 1fr; gap: 10px; font-size: 13px; }
+      .a-facts dt { color: var(--muted); }
+      .a-facts dd { margin: 0; font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere; }
+      .a-more { display: grid; grid-template-columns: repeat(3, 1fr); }
+      .a-more > .m-pane + .m-pane { border-left: 0; }
+      .a-more h3 { margin-bottom: 4px; }
+      .a-more .m-row { margin-top: 10px; }
+      .a-footer { border-radius: 0 0 var(--radius-group) var(--radius-group); }
+      .a-current { display: flex; align-items: center; gap: 12px; margin: 10px 0 0; }
+      .a-current strong { font-size: 17px; }
+      @media (max-width: 900px) { .a-grid, .a-more { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <canvas class="ua-doc-static-mesh" data-ua-metallic-mesh aria-hidden="true"></canvas>
+    <div class="mesh-scrim" aria-hidden="true"></div>
+
+    <main class="m-shell">
+      <header class="m-pane m-header">
+        <div class="m-brand">
+          <img src="../../../ui/desktop-shell/agent-mark.png" alt="" />
+          <div>
+            <h1>Universal Agents</h1>
+            <div class="m-chips">
+              <span class="m-chip">Launcher 0.5.0</span>
+              <span class="m-chip">UA 0.9.2</span>
+              <button class="m-chip m-chip-update" type="button" onclick="document.getElementById('ua-versions').scrollIntoView({behavior:'smooth'})">UA 0.9.3 available</button>
+            </div>
+          </div>
+        </div>
+        <span></span>
+        <div class="m-header-actions">
+          <div class="m-segment" role="group" aria-label="Runtime controls">
+            <button class="button button-secondary" type="button" disabled>Start</button>
+            <button class="button button-secondary" type="button">Restart</button>
+            <button class="button button-danger" type="button">Stop</button>
+          </div>
+          <div class="status-pill status-ready" role="status"><span class="status-dot" aria-hidden="true"></span>Running</div>
+          <button class="icon-button" type="button" data-theme-toggle aria-label="Switch theme">◐</button>
+        </div>
+        <div class="m-progress" role="status">
+          <div>
+            <div class="m-progress-bar"><span></span></div>
+          </div>
+          <span>Downloading UA 0.9.3 in the background · 412 of 668 MB · UA keeps running</span>
+        </div>
+      </header>
+
+      <div class="a-grid">
+        <section class="m-pane a-hero" aria-labelledby="a-hero-title">
+          <p class="m-kicker">Your team</p>
+          <h2 id="a-hero-title">Universal Agents is running</h2>
+          <p class="m-muted">Open the Web Chat to talk to your team. Closing this window keeps UA running.</p>
+          <div class="m-row">
+            <button class="button button-primary" type="button">Open in app</button>
+            <button class="button button-secondary" type="button">Open in browser</button>
+            <a class="docs-link" href="#">Read the docs</a>
+          </div>
+          <dl class="a-facts">
+            <div><dt>Web address</dt><dd>http://127.0.0.1:18090/webchat</dd></div>
+            <div><dt>Shared folder</dt><dd>~/Projects/acme (team/team-shared)</dd></div>
+            <div><dt>OpenAI login</dt><dd>Imported</dd></div>
+          </dl>
+        </section>
+
+        <section class="m-pane" id="ua-versions" aria-labelledby="a-versions-title">
+          <p class="m-kicker">Universal Agents version</p>
+          <h2 id="a-versions-title">Choose which UA runs</h2>
+          <div class="a-current">
+            <span class="m-badge m-badge-ok">Running</span>
+            <strong>UA 0.9.2</strong>
+            <span class="m-spacer"></span>
+            <button class="button button-secondary button-compact" type="button">Check now</button>
+          </div>
+          <p class="m-muted" style="margin:6px 0 0">Last checked 4 minutes ago. Downloading never restarts UA; switching does, after you confirm.</p>
+
+          <ul class="m-versions" aria-label="Recent UA releases">
+            <li class="m-version">
+              <div><strong>0.9.3</strong><small>Released Oct 13</small></div>
+              <div class="m-row">
+                <span class="m-badge m-badge-info">Latest</span>
+                <span class="m-badge m-badge-ok">✓ Works with this launcher</span>
+              </div>
+              <div class="m-version-actions">
+                <div class="m-mini-progress"><div class="m-progress-bar"><span></span></div>Downloading · 62%</div>
+              </div>
+            </li>
+            <li class="m-version m-version-current">
+              <div><strong>0.9.2</strong><small>Released Oct 12</small></div>
+              <div class="m-row">
+                <span class="m-badge m-badge-ok">Running</span>
+                <span class="m-badge">On this computer</span>
+              </div>
+              <div class="m-version-actions">
+                <button class="button button-quiet button-compact" type="button">Notes</button>
+              </div>
+            </li>
+            <li class="m-version">
+              <div><strong>0.9.1</strong><small>Released Oct 11</small></div>
+              <div class="m-row">
+                <span class="m-badge m-badge-ok">✓ Works with this launcher</span>
+                <span class="m-badge">On this computer</span>
+              </div>
+              <div class="m-version-actions">
+                <button class="button button-quiet button-compact" type="button">Notes</button>
+                <button class="button button-secondary button-compact" type="button" data-open="a-switch">Switch back…</button>
+              </div>
+            </li>
+            <li class="m-version">
+              <div><strong>0.9.0</strong><small>Released Oct 11</small></div>
+              <div class="m-row"><span class="m-badge m-badge-ok">✓ Works with this launcher</span></div>
+              <div class="m-version-actions">
+                <button class="button button-quiet button-compact" type="button">Notes</button>
+                <button class="button button-secondary button-compact" type="button">Download</button>
+              </div>
+            </li>
+            <li class="m-version">
+              <div><strong>0.8.5</strong><small>Released Oct 10</small></div>
+              <div class="m-row"><span class="m-badge m-badge-ok">✓ Works with this launcher</span></div>
+              <div class="m-version-actions">
+                <button class="button button-quiet button-compact" type="button">Notes</button>
+                <button class="button button-secondary button-compact" type="button">Download</button>
+              </div>
+            </li>
+          </ul>
+          <label class="toggle-row" for="a-pre" style="margin-top:12px">
+            <span>
+              <strong>Show pre-release and unchecked versions</strong>
+              <small>Nightly builds and releases not yet confirmed to work with this launcher. They may not start.</small>
+            </span>
+            <input id="a-pre" type="checkbox" role="switch" />
+          </label>
+        </section>
+      </div>
+
+      <div class="a-more">
+        <section class="m-pane">
+          <h3>Access</h3>
+          <p class="m-muted">Shared folder chosen · OpenAI login imported · Image access verified</p>
+          <div class="m-row"><button class="button button-secondary button-compact" type="button">Manage access</button></div>
+        </section>
+        <section class="m-pane">
+          <h3>Logs and diagnostics</h3>
+          <p class="m-muted">No errors in the last hour.</p>
+          <div class="m-row"><button class="button button-secondary button-compact" type="button">Show logs</button><button class="button button-quiet button-compact" type="button">Download diagnostics</button></div>
+        </section>
+        <section class="m-pane">
+          <h3>Settings</h3>
+          <p class="m-muted">Start at login: on · Refresh skills on start: on</p>
+          <div class="m-row"><button class="button button-secondary button-compact" type="button">Open settings</button></div>
+        </section>
+      </div>
+
+      <footer class="m-pane a-footer m-row">
+        <p class="m-muted" style="margin:0">Closing this window keeps UA running. Quitting the launcher also leaves UA running unless you stop it.</p>
+        <span class="m-spacer"></span>
+        <button class="button button-danger button-compact" type="button">Stop UA and quit</button>
+        <button class="button button-secondary button-compact" type="button">Quit launcher</button>
+      </footer>
+    </main>
+
+    <section class="m-design-notes" aria-label="Design notes">
+      <h2>Concept A: Home with a version list</h2>
+      <ul>
+        <li>Closest to today's layout. The UA updates panel becomes <b>Choose which UA runs</b>: the last five releases, always visible, each with its own action. Nothing depends on a notification you might miss.</li>
+        <li>Each row says whether it is checked for this launcher and whether it is already downloaded. Download never restarts UA; <b>Switch</b> opens a confirmation with the notes (try <b>Switch back…</b> on 0.9.1).</li>
+        <li>The header is one aligned row: a single Start / Restart / Stop group (the duplicate lower controls are gone), the status pill and the theme switch at the same height. Progress runs as a thin bar under the header.</li>
+        <li>Access, logs and settings shrink to summary cards that open their full view, so the home screen fits without scrolling.</li>
+        <li>The launcher's own update is the floating badge at the bottom right. Use the mockup bar to see its three states.</li>
+      </ul>
+    </section>
+
+    <div id="a-switch" class="m-dialog-backdrop" data-dismissable hidden>
+      <div class="m-dialog" role="dialog" aria-modal="true" aria-labelledby="a-switch-title">
+        <p class="m-kicker">Switch version</p>
+        <h2 id="a-switch-title">Switch back to UA 0.9.1?</h2>
+        <p class="m-muted">UA restarts, which interrupts any work in progress. Your shared folder and data stay.</p>
+        <p class="m-callout">0.9.1 is older than the version you are running. If UA 0.9.2 already changed your data, 0.9.1 may not be able to read it. Back up the data folder first if you are unsure.</p>
+        <pre class="m-notes">UA 0.9.2 (what you would leave)
+- Faster agent start after a restart
+- Fixes for MCP connection status</pre>
+        <label class="update-ack"><input type="checkbox" checked /> I understand UA will restart and older versions may not read newer data.</label>
+        <div class="m-row" style="margin-top:14px; justify-content:flex-end">
+          <button class="button button-quiet" type="button" data-close="a-switch">Cancel</button>
+          <button class="button button-primary" type="button" data-close="a-switch">Switch and restart</button>
+        </div>
+      </div>
+    </div>
+
+    <aside class="m-launcher-badge" aria-live="polite">
+      <span class="m-ring" aria-hidden="true"></span>
+      <div>
+        <strong data-launcher-show="available">Launcher 0.5.5 is available</strong>
+        <strong data-launcher-show="downloading">Downloading launcher 0.5.5 · 64%</strong>
+        <strong data-launcher-show="ready">Launcher 0.5.5 is ready</strong>
+        <small data-launcher-show="available">You have 0.5.0. UA keeps running while the launcher updates.</small>
+        <small data-launcher-show="downloading">Keep working. Nothing restarts until you choose.</small>
+        <small data-launcher-show="ready">Restart the launcher to finish. UA keeps running.</small>
+      </div>
+      <button class="button button-quiet button-compact" type="button" data-launcher-show="available">What's new</button>
+      <button class="button button-primary button-compact" type="button" data-launcher-show="available" data-set-launcher="downloading">Download</button>
+      <button class="button button-primary button-compact" type="button" data-launcher-show="ready">Restart launcher</button>
+    </aside>
+
+    <div class="m-mock-bar" aria-label="Mockup controls">
+      <b>Mockup</b> Launcher update:
+      <button type="button" data-set-launcher="none">None</button>
+      <button type="button" data-set-launcher="available">Available</button>
+      <button type="button" data-set-launcher="downloading">Downloading</button>
+      <button type="button" data-set-launcher="ready">Ready</button>
+      <a href="index.html">All concepts</a>
+    </div>
+  </body>
+</html>

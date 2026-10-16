@@ -1,0 +1,37 @@
+name: Personal details
+
+# Scans tracked files for real email addresses, phone numbers and home folder
+# paths. Runs on every change, including documentation-only edits, which the
+# CI workflow skips. See CONTRIBUTING.md ("Personal details").
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: personal-details-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: rtk proxy bash --noprofile --norc -e -o pipefail {0}
+
+jobs:
+  scan:
+    name: Scan tracked files
+    if: github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, Linux, X64, ua-build, ua-linux]
+    timeout-minutes: 10
+    steps:
+      - name: Require managed local runner
+        run: node -e "if (process.env.UA_CI_HOOK_VERSION !== '1' || process.env.UA_CI_BUILD_CACHE_VERSION !== '1') throw new Error('Install the reviewed CI cleanup hooks before running jobs')"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Scan for personal details
+        run: python3 -m unittest discover -s tests -p 'test_no_personal_details.py' -v

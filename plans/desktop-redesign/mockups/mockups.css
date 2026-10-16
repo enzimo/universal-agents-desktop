@@ -1,0 +1,528 @@
+/* Shared layout for the redesign mockups. Tokens, buttons, status pills and
+   switches come from the real ui/desktop-shell/styles.css, so the mockups use
+   the shipped colors and controls. Classes here are prefixed m- to avoid
+   colliding with the app's own layout rules. */
+
+body {
+  padding-bottom: 96px;
+}
+
+.m-shell {
+  width: min(1240px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 22px 0 18px;
+  display: grid;
+  gap: 0;
+}
+
+.m-pane {
+  position: relative;
+  padding: 20px 22px;
+  background: var(--pane-fill);
+  border: 1px solid var(--pane-border);
+  box-shadow: var(--pane-shadow);
+  backdrop-filter: var(--pane-filter);
+  -webkit-backdrop-filter: var(--pane-filter);
+  color: var(--ink);
+}
+
+.m-rounded {
+  border-radius: var(--radius-group);
+}
+
+.m-kicker {
+  margin: 0 0 4px;
+  color: var(--accent-ink);
+  font-size: 11px;
+  font-weight: 820;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.m-muted {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.m-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.m-spacer {
+  flex: 1;
+}
+
+/* ---------- Header ----------
+   One row, every item vertically centred: brand, version chips, the single
+   lifecycle button group, the status pill and the theme switch. The progress
+   line sits under the whole header instead of pushing buttons around. */
+.m-header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 18px;
+  border-radius: var(--radius-group) var(--radius-group) 0 0;
+}
+
+.m-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.m-brand img {
+  width: 44px;
+  height: 44px;
+}
+
+.m-brand h1 {
+  font-size: 21px;
+}
+
+.m-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.m-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 2px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: default;
+}
+
+button.m-chip {
+  cursor: pointer;
+}
+
+button.m-chip:hover,
+button.m-chip:focus-visible {
+  border-color: var(--control-hover-border);
+  outline: none;
+}
+
+.m-chip-update {
+  border-color: var(--status-busy);
+  color: var(--ink);
+}
+
+.m-chip-update::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--status-busy);
+}
+
+.m-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Segmented lifecycle control: equal heights, one outline. */
+.m-segment {
+  display: inline-flex;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-control);
+  overflow: hidden;
+}
+
+.m-segment .button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.m-segment .button + .button {
+  border-left: 1px solid var(--control-border);
+}
+
+.m-header-actions .status-pill {
+  min-height: 38px;
+}
+
+.m-header-actions .icon-button {
+  width: 38px;
+  height: 38px;
+  min-height: 38px;
+}
+
+.m-progress {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.m-progress-bar {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--switch-off);
+  overflow: hidden;
+}
+
+.m-progress-bar span {
+  display: block;
+  width: 62%;
+  height: 100%;
+  background: var(--progress);
+}
+
+/* ---------- Badges ---------- */
+.m-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border: 1px solid var(--neutral-border);
+  border-radius: 999px;
+  background: var(--neutral-fill);
+  color: var(--neutral-ink);
+  font-size: 11px;
+  font-weight: 820;
+  white-space: nowrap;
+}
+
+.m-badge-ok {
+  border-color: var(--ready-border);
+  background: var(--ready-fill);
+  color: var(--ready-ink);
+}
+
+.m-badge-busy {
+  border-color: var(--busy-border);
+  background: var(--busy-fill);
+  color: var(--busy-ink);
+}
+
+.m-badge-info {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--accent-ink);
+}
+
+.m-badge-error {
+  border-color: var(--error-border);
+  background: var(--error-fill);
+  color: var(--error-ink);
+}
+
+/* ---------- Version list ---------- */
+.m-versions {
+  display: grid;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--inner-line);
+  border-radius: var(--radius-box);
+  overflow: hidden;
+}
+
+.m-version {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(160px, 1.4fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--inner-line);
+}
+
+.m-version:first-child {
+  border-top: 0;
+}
+
+.m-version strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 860;
+}
+
+.m-version small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.m-version .m-row {
+  gap: 6px;
+}
+
+.m-version-current {
+  background: rgba(98, 213, 243, 0.07);
+}
+
+.m-version-current::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--status-ready);
+}
+
+.m-version-prerelease {
+  background: repeating-linear-gradient(135deg, transparent 0 10px, rgba(240, 163, 90, 0.05) 10px 20px);
+}
+
+.m-version-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.m-mini-progress {
+  display: grid;
+  gap: 4px;
+  min-width: 150px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.m-callout {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--busy-border);
+  border-radius: var(--radius-box);
+  background: var(--busy-fill);
+  color: var(--busy-ink);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.m-callout-info {
+  border-color: var(--line);
+  background: var(--hint-fill);
+  color: var(--ink);
+}
+
+/* ---------- Launcher self-update badge ----------
+   Floats bottom-right in every concept. Three states, switched by the mockup
+   toolbar through data-launcher-state on <html>. */
+.m-launcher-badge {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 520px;
+  padding: 10px 12px 10px 10px;
+  border: 1px solid var(--modal-border);
+  border-radius: 14px;
+  background: var(--modal-fill);
+  box-shadow: var(--modal-shadow);
+  color: var(--ink);
+}
+
+.m-launcher-badge strong {
+  display: block;
+  font-size: 14px;
+}
+
+.m-launcher-badge small {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.m-ring {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: conic-gradient(var(--progress) calc(var(--pct, 0) * 1%), var(--switch-off) 0);
+}
+
+.m-ring::after {
+  content: "";
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--dark-pane, #fff) url("../../../ui/desktop-shell/agent-mark.png") center / 20px no-repeat;
+}
+
+[data-launcher-state="available"] .m-ring {
+  --pct: 0;
+  background: var(--status-busy);
+}
+
+[data-launcher-state="downloading"] .m-ring {
+  --pct: 64;
+}
+
+[data-launcher-state="ready"] .m-ring {
+  --pct: 100;
+  background: var(--status-ready);
+}
+
+[data-launcher-show] {
+  display: none !important;
+}
+
+[data-launcher-state="available"] [data-launcher-show~="available"],
+[data-launcher-state="downloading"] [data-launcher-show~="downloading"],
+[data-launcher-state="ready"] [data-launcher-show~="ready"] {
+  display: var(--show-display, inline-flex) !important;
+}
+
+.m-launcher-badge strong,
+.m-launcher-badge small,
+[data-show-block] {
+  --show-display: block;
+}
+
+.m-launcher-badge > div {
+  flex: 1;
+  min-width: 230px;
+}
+
+[data-launcher-state="none"] .m-launcher-badge {
+  display: none;
+}
+
+/* ---------- Mockup-only toolbar and notes ---------- */
+.m-mock-bar {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 30;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(100% - 480px);
+  padding: 8px 10px;
+  border: 1px dashed #f0a35a;
+  border-radius: 10px;
+  background: rgba(7, 11, 14, 0.9);
+  color: #f2f7f8;
+  font-size: 12px;
+}
+
+.m-mock-bar b {
+  margin-right: 4px;
+  color: #f0a35a;
+}
+
+.m-mock-bar button,
+.m-mock-bar a {
+  padding: 4px 9px;
+  border: 1px solid #367287;
+  border-radius: 6px;
+  background: #10232d;
+  color: #f2f7f8;
+  font: inherit;
+  font-size: 12px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.m-mock-bar button[aria-pressed="true"] {
+  border-color: #f0a35a;
+  background: #493917;
+}
+
+.m-design-notes {
+  width: min(1240px, calc(100% - 40px));
+  margin: 18px auto 0;
+  padding: 16px 20px;
+  border: 1px dashed rgba(240, 163, 90, 0.7);
+  border-radius: var(--radius-group);
+  background: rgba(7, 11, 14, 0.82);
+  color: #e6eef0;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+:root[data-color-mode="light"] .m-design-notes {
+  background: rgba(255, 255, 255, 0.92);
+  color: #10201c;
+}
+
+.m-design-notes h2 {
+  margin-bottom: 6px;
+  font-size: 15px;
+  color: #f0a35a;
+}
+
+.m-design-notes ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+/* ---------- Dialog (shared) ---------- */
+.m-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  display: grid;
+  place-items: center;
+  background: var(--backdrop);
+}
+
+.m-dialog {
+  width: min(560px, calc(100% - 32px));
+  padding: 22px 24px;
+  border: 1px solid var(--modal-border);
+  border-radius: var(--radius-group);
+  background: var(--modal-fill);
+  box-shadow: var(--modal-shadow);
+  color: var(--ink);
+}
+
+.m-dialog h2 {
+  margin-bottom: 8px;
+}
+
+.m-notes {
+  max-height: 150px;
+  margin: 12px 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border: 1px solid var(--log-border);
+  border-radius: var(--radius-box);
+  background: var(--log-fill);
+  color: var(--log-ink);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 900px) {
+  .m-header {
+    grid-template-columns: 1fr;
+  }
+  .m-version {
+    grid-template-columns: 1fr;
+  }
+  .m-version-actions {
+    justify-content: flex-start;
+  }
+}

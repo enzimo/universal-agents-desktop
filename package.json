@@ -1,0 +1,11 @@
+{
+  "name": "ua-desktop-ui-tests",
+  "private": true,
+  "scripts": {
+    "test:ui:build": "cargo build -p universal-agents-desktop --example ui_driver --features ui-test --locked",
+    "test:ui": "node tests/ui/launcher.mjs"
+  },
+  "devDependencies": {
+    "webdriverio": "9.31.7"
+  }
+}

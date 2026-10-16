@@ -1,0 +1,35 @@
+{
+  "host_contract_version": 3,
+  "ua_version": "0.8.4",
+  "image": "ghcr.io/enzimo/universal-agents@sha256:e685456be11c1fc74d3cf41193c6f78f5e72fba7e12c3108bc0575f73be1d296",
+  "upgrade_sources": [
+    {
+      "host_contract_version": 3,
+      "ua_version": "0.8.3",
+      "image": "ghcr.io/enzimo/universal-agents@sha256:3333333333333333333333333333333333333333333333333333333333333333"
+    }
+  ],
+  "command": [
+    "run"
+  ],
+  "data_mount": "/data",
+  "workspace_mount": "/data/workspaces/team/team-shared",
+  "codex_auth_mount": "/codex-home/auth.json",
+  "codex_home": "/codex-home",
+  "codex_auth_store": "/data/auth/openai_codex_auth.json",
+  "instance_config": "/data/instance_config.yaml",
+  "container_name": "universal-agents-desktop",
+  "container_ports": {
+    "web": 18090,
+    "broker": 18600
+  },
+  "web_ui_path": "/webchat",
+  "health_path": "/health",
+  "codex_import_command": [
+    "python",
+    "-c",
+    "import sys\nfrom custom_agents.openai_codex_auth import import_shared_codex_auth\ntry:\n    import_shared_codex_auth(codex_home=sys.argv[1], target_auth_store_path=sys.argv[2])\nexcept Exception:\n    print(\"UA could not import Codex credentials. Choose a current file-backed Codex auth.json and retry.\", file=sys.stderr)\n    sys.exit(1)\n"
+  ],
+  "onboarding_ui_path": "/",
+  "docs_path": "/docs/"
+}

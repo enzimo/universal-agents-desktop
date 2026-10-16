@@ -1,0 +1,75 @@
+name: Windows runner build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-runner-build
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: rtk proxy bash --noprofile --norc -e -o pipefail {0}
+
+jobs:
+  windows:
+    if: github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, Windows, X64, ua-build, ua-windows]
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: rtk proxy powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$ErrorActionPreference = 'Stop'; $global:LASTEXITCODE = 0; & ([ScriptBlock]::Create([IO.File]::ReadAllText('{0}'))); exit $LASTEXITCODE"
+    steps:
+      - name: Require managed local runner
+        run: node -e "if (process.env.UA_CI_HOOK_VERSION !== '1' || process.env.UA_CI_BUILD_CACHE_VERSION !== '1') throw new Error('Install the reviewed CI cleanup hooks before running jobs')"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Ensure pinned Rust toolchain
+        run: rustup toolchain install 1.95.0 --profile minimal --no-self-update --component rustfmt,clippy
+      - name: Test and lint the native desktop
+        run: |
+          cargo test --workspace --locked
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test ui/desktop-shell/app.test.cjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Check native popup sessions and permissions
+        run: |
+          & ./.github/scripts/windows-popup-smoke.ps1
+      - name: Build development installers
+        run: |
+          node .github/scripts/tauri-build.cjs
+          exit $LASTEXITCODE
+      - name: Exercise launcher UI in the native WebView
+        run: |
+          & ./.github/scripts/windows-ui-tests.ps1
+      - name: Upload UI evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          retention-days: 3
+          name: windows-ui-evidence
+          if-no-files-found: ignore
+          path: target/ui-test-results/
+      - name: Checksum installers
+        run: |
+          $files = @(Get-ChildItem target/release/bundle/nsis/*.exe, target/release/bundle/msi/*.msi)
+          if ($files.Count -ne 2) { throw 'Expected an EXE and an MSI installer.' }
+          $files | ForEach-Object {
+            $hash = (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLowerInvariant()
+            "$hash  $($_.Name)"
+          } | Set-Content -Encoding ascii target/release/bundle/SHA256SUMS.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          retention-days: 3
+          name: universal-agents-windows-x64-development
+          if-no-files-found: error
+          path: |
+            target/release/bundle/nsis/*.exe
+            target/release/bundle/msi/*.msi
+            target/release/bundle/SHA256SUMS.txt

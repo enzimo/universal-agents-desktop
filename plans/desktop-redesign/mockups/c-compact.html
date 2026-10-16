@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Concept C: Compact window with a version picker</title>
+    <link rel="stylesheet" href="../../../ui/desktop-shell/vendor/ua-runtime-theme.css" />
+    <link rel="stylesheet" href="../../../ui/desktop-shell/styles.css" />
+    <link rel="stylesheet" href="mockups.css" />
+    <script src="../../../ui/desktop-shell/theme.js"></script>
+    <script src="../../../ui/desktop-shell/vendor/static-mesh.js" defer></script>
+    <script src="../../../ui/desktop-shell/vendor/metallic_mesh.js" defer></script>
+    <script src="mockups.js" defer></script>
+    <style>
+      .c-stage { display: flex; flex-wrap: wrap; justify-content: center; gap: 36px; padding: 28px 20px 0; }
+      .c-caption { margin: 0 0 8px; color: #f0a35a; font-size: 12px; font-weight: 820; letter-spacing: 0.06em; text-align: center; text-transform: uppercase; }
+      .c-window { position: relative; width: 440px; height: 720px; display: flex; flex-direction: column; overflow: hidden; border-radius: 16px; padding: 0; }
+      .c-top { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--inner-line); }
+      .c-top img { width: 30px; height: 30px; }
+      .c-top h1 { font-size: 15px; }
+      .c-top .icon-button { width: 34px; height: 34px; min-height: 34px; }
+      .c-launcher-strip { display: flex; align-items: center; gap: 10px; padding: 8px 16px; border-bottom: 1px solid var(--inner-line); background: rgba(240, 163, 90, 0.1); font-size: 12.5px; }
+      .c-body { flex: 1; display: grid; align-content: start; gap: 16px; padding: 22px 18px; }
+      .c-state { display: grid; justify-items: center; gap: 8px; padding: 18px 12px; text-align: center; border: 1px solid var(--inner-line); border-radius: var(--radius-box); }
+      .c-state .c-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--status-ready); box-shadow: 0 0 0 6px rgba(101, 217, 139, 0.16); }
+      .c-state h2 { font-size: 22px; }
+      .c-wide { width: 100%; }
+      .c-version { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 54px; padding: 8px 12px; border: 1px solid var(--control-border); border-radius: var(--radius-control); background: var(--control-fill); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+      .c-version:hover { border-color: var(--control-hover-border); }
+      .c-version strong { display: block; font-size: 15px; }
+      .c-version small { display: block; color: var(--muted); font-size: 12px; }
+      .c-version .c-caret { margin-left: auto; color: var(--muted); }
+      .c-links { display: flex; justify-content: space-between; font-size: 13px; }
+      .c-links a { color: var(--accent-ink); font-weight: 760; }
+      .c-sheet-backdrop { position: absolute; inset: 0; background: var(--backdrop); }
+      .c-sheet { position: absolute; left: 0; right: 0; bottom: 0; display: grid; gap: 10px; max-height: 86%; padding: 16px 16px 14px; overflow: auto; border-top: 1px solid var(--modal-border); border-radius: 16px 16px 0 0; background: var(--modal-fill); box-shadow: var(--modal-shadow); }
+      .c-sheet h2 { font-size: 17px; }
+      .c-opt { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--inner-line); border-radius: var(--radius-box); }
+      .c-opt input { width: 18px; height: 18px; accent-color: var(--switch-on); }
+      .c-opt strong { font-size: 14.5px; }
+      .c-opt small { display: block; color: var(--muted); font-size: 12px; }
+      .c-opt.is-selected { border-color: var(--focus); background: rgba(98, 213, 243, 0.08); }
+      .c-sheet-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 4px; }
+      .c-handle { justify-self: center; width: 40px; height: 4px; border-radius: 4px; background: var(--line); }
+    </style>
+  </head>
+  <body>
+    <canvas class="ua-doc-static-mesh" data-ua-metallic-mesh aria-hidden="true"></canvas>
+    <div class="mesh-scrim" aria-hidden="true"></div>
+
+    <div class="c-stage">
+      <div>
+        <p class="c-caption">Main view</p>
+        <main class="m-pane c-window">
+          <div class="c-top">
+            <img src="../../../ui/desktop-shell/agent-mark.png" alt="" />
+            <h1>Universal Agents</h1>
+            <span class="m-spacer"></span>
+            <button class="icon-button" type="button" aria-label="Settings">⚙</button>
+            <button class="icon-button" type="button" data-theme-toggle aria-label="Switch theme">◐</button>
+          </div>
+          <div class="c-launcher-strip">
+            <span class="m-badge m-badge-busy">Launcher 0.5.5</span>
+            <span>A new launcher is ready to download.</span>
+            <span class="m-spacer"></span>
+            <a href="#" style="color:var(--accent-ink);font-weight:800" data-set-launcher="downloading">Update</a>
+          </div>
+          <div class="c-body">
+            <div class="c-state" role="status">
+              <span class="c-dot" aria-hidden="true"></span>
+              <h2>Running</h2>
+              <p class="m-muted" style="margin:0">Your team is ready at 127.0.0.1:18090</p>
+            </div>
+            <button class="button button-primary c-wide" type="button">Open in app</button>
+            <button class="button button-secondary c-wide" type="button">Open in browser</button>
+            <button class="c-version" type="button" data-open="c-sheet-live">
+              <span>
+                <strong>UA 0.9.2</strong>
+                <small>0.9.3 is available · tap to choose a version</small>
+              </span>
+              <span class="m-badge m-badge-busy">New</span>
+              <span class="c-caret" aria-hidden="true">›</span>
+            </button>
+            <div class="m-segment c-wide" role="group" aria-label="Runtime controls" style="display:grid;grid-template-columns:repeat(3,1fr)">
+              <button class="button button-secondary" type="button" disabled>Start</button>
+              <button class="button button-secondary" type="button">Restart</button>
+              <button class="button button-danger" type="button">Stop</button>
+            </div>
+            <div class="c-links"><a href="#">Access</a><a href="#">Logs</a><a href="#">Docs</a><a href="#">Quit…</a></div>
+          </div>
+
+          <div id="c-sheet-live" data-dismissable hidden>
+            <div class="c-sheet-backdrop" data-close="c-sheet-live"></div>
+            <div class="c-sheet" role="dialog" aria-label="Choose a UA version">
+              <span class="c-handle"></span>
+              <h2>Choose a UA version</h2>
+              <p class="m-muted" style="margin:0">Same picker as on the right.</p>
+              <button class="button button-quiet" type="button" data-close="c-sheet-live">Close</button>
+            </div>
+          </div>
+        </main>
+      </div>
+
+      <div>
+        <p class="c-caption">Version picker open</p>
+        <main class="m-pane c-window" aria-hidden="false">
+          <div class="c-top">
+            <img src="../../../ui/desktop-shell/agent-mark.png" alt="" />
+            <h1>Universal Agents</h1>
+            <span class="m-spacer"></span>
+            <button class="icon-button" type="button" aria-label="Settings">⚙</button>
+            <button class="icon-button" type="button" aria-label="Switch theme">◐</button>
+          </div>
+          <div class="c-body" style="filter:blur(1px)">
+            <div class="c-state"><span class="c-dot"></span><h2>Running</h2></div>
+            <button class="button button-primary c-wide" type="button" tabindex="-1">Open in app</button>
+          </div>
+          <div class="c-sheet-backdrop"></div>
+          <div class="c-sheet" role="dialog" aria-labelledby="c-sheet-title">
+            <span class="c-handle" aria-hidden="true"></span>
+            <h2 id="c-sheet-title">Choose a UA version</h2>
+            <label class="c-opt is-selected">
+              <input type="radio" name="c-ver" checked />
+              <span><strong>0.9.3</strong> <span class="m-badge m-badge-info">Latest</span><small>Oct 13 · ✓ works with this launcher · not downloaded</small></span>
+              <span class="m-badge m-badge-busy">New</span>
+            </label>
+            <label class="c-opt">
+              <input type="radio" name="c-ver" />
+              <span><strong>0.9.2</strong><small>Oct 12 · running now</small></span>
+              <span class="m-badge m-badge-ok">Running</span>
+            </label>
+            <label class="c-opt">
+              <input type="radio" name="c-ver" />
+              <span><strong>0.9.1</strong><small>Oct 11 · ✓ works · downloaded</small></span>
+              <span></span>
+            </label>
+            <label class="c-opt">
+              <input type="radio" name="c-ver" />
+              <span><strong>0.9.0</strong><small>Oct 11 · ✓ works</small></span>
+              <span></span>
+            </label>
+            <label class="c-opt">
+              <input type="radio" name="c-ver" />
+              <span><strong>0.8.5</strong><small>Oct 10 · ✓ works</small></span>
+              <span></span>
+            </label>
+            <a href="#" style="font-size:12.5px;color:var(--accent-ink);font-weight:760">Show pre-release and unchecked versions</a>
+            <p class="m-muted" style="margin:0;font-size:12px">0.9.3: Import a team export during onboarding; intro title shadow fix. <a href="#" style="color:var(--accent-ink)">Full notes</a></p>
+            <div class="c-sheet-actions">
+              <button class="button button-secondary" type="button">Download only</button>
+              <button class="button button-primary" type="button">Download and switch</button>
+            </div>
+            <p class="m-muted" style="margin:0;font-size:11.5px">Download and switch restarts UA when the download finishes, after one more confirmation.</p>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <section class="m-design-notes" aria-label="Design notes">
+      <h2>Concept C: Compact window with a version picker</h2>
+      <ul>
+        <li>The launcher shrinks to a small, phone-sized window: one big status, the two Open buttons, the version, and Start / Restart / Stop. Everything else (access, logs, settings) is one click away behind links and the gear.</li>
+        <li>The current UA version is a button. It always says what is newer, and it opens a picker sheet with the last five releases (right). Pick one, then <b>Download only</b> or <b>Download and switch</b>.</li>
+        <li>The launcher's own update appears as a strip under the title bar instead of a floating badge, because a small window has no room for one. The floating badge (bottom right) is shown for comparison.</li>
+        <li>Fits a menu-bar or tray app well and is the least intimidating. Weakest for troubleshooting, since logs and access move off the main view.</li>
+      </ul>
+    </section>
+
+    <aside class="m-launcher-badge" aria-live="polite">
+      <span class="m-ring" aria-hidden="true"></span>
+      <div>
+        <strong data-launcher-show="available">Launcher 0.5.5 is available</strong>
+        <strong data-launcher-show="downloading">Downloading launcher 0.5.5 · 64%</strong>
+        <strong data-launcher-show="ready">Launcher 0.5.5 is ready</strong>
+        <small data-launcher-show="available">You have 0.5.0. UA keeps running while the launcher updates.</small>
+        <small data-launcher-show="downloading">Keep working. Nothing restarts until you choose.</small>
+        <small data-launcher-show="ready">Restart the launcher to finish. UA keeps running.</small>
+      </div>
+      <button class="button button-quiet button-compact" type="button" data-launcher-show="available">What's new</button>
+      <button class="button button-primary button-compact" type="button" data-launcher-show="available" data-set-launcher="downloading">Download</button>
+      <button class="button button-primary button-compact" type="button" data-launcher-show="ready">Restart launcher</button>
+    </aside>
+
+    <div class="m-mock-bar" aria-label="Mockup controls">
+      <b>Mockup</b> Launcher update:
+      <button type="button" data-set-launcher="none">None</button>
+      <button type="button" data-set-launcher="available">Available</button>
+      <button type="button" data-set-launcher="downloading">Downloading</button>
+      <button type="button" data-set-launcher="ready">Ready</button>
+      <a href="index.html">All concepts</a>
+    </div>
+  </body>
+</html>

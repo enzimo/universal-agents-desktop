@@ -1,0 +1,46 @@
+{
+  "host_contract_version": 2,
+  "ua_version": "0.4.2",
+  "image": "ghcr.io/enzimo/universal-agents@sha256:fcb10633cd91c637432956fe393d32e181bb3c739aa7abee0b011ee395461269",
+  "upgrade_sources": [
+    {
+      "host_contract_version": 2,
+      "ua_version": "0.4.1",
+      "image": "ghcr.io/enzimo/universal-agents@sha256:45aaa3c7f623c0786b90a0cbf6d15d3cad5903123a8e4e20212dcf6ff7868a0e"
+    },
+    {
+      "host_contract_version": 1,
+      "ua_version": "0.3.0",
+      "image": "ghcr.io/enzimo/universal-agents@sha256:aeeef1fe87067e9dd2da071e7ad80ff5c644c7600771d448957726aa5efc5ff6"
+    },
+    {
+      "host_contract_version": 2,
+      "ua_version": "0.3.0",
+      "image": "ghcr.io/enzimo/universal-agents@sha256:aeeef1fe87067e9dd2da071e7ad80ff5c644c7600771d448957726aa5efc5ff6"
+    }
+  ],
+  "command": [
+    "run"
+  ],
+  "data_mount": "/data",
+  "workspace_mount": "/data/workspace",
+  "codex_auth_mount": "/codex-home/auth.json",
+  "codex_home": "/codex-home",
+  "codex_auth_store": "/data/auth/openai_codex_auth.json",
+  "instance_config": "/data/instance_config.yaml",
+  "assistant_cli": "/app/assistant_cli.pyc",
+  "container_name": "universal-agents-desktop",
+  "container_ports": {
+    "web": 18090,
+    "broker": 18600
+  },
+  "web_ui_path": "/webchat",
+  "health_path": "/health",
+  "codex_import_command": [
+    "python",
+    "-c",
+    "import sys\nfrom custom_agents.openai_codex_auth import import_shared_codex_auth\ntry:\n    import_shared_codex_auth(codex_home=sys.argv[1], target_auth_store_path=sys.argv[2])\nexcept Exception:\n    print(\"UA could not import Codex credentials. Choose a current file-backed Codex auth.json and retry.\", file=sys.stderr)\n    sys.exit(1)\n"
+  ],
+  "onboarding_ui_path": "/",
+  "docs_path": "/docs/"
+}

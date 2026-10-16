@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**/*.md', 'docs/**', 'compatible-runtimes.json']
+  pull_request:
+    paths-ignore: ['**/*.md', 'docs/**', 'compatible-runtimes.json']
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Build installers as well as compiling and testing
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: rtk proxy bash --noprofile --norc -e -o pipefail {0}
+
+jobs:
+  core:
+    name: Core checks
+    if: github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, Linux, X64, ua-build, ua-linux]
+    timeout-minutes: 45
+    steps:
+      - name: Require managed local runner
+        run: node -e "if (process.env.UA_CI_HOOK_VERSION !== '1' || process.env.UA_CI_BUILD_CACHE_VERSION !== '1') throw new Error('Install the reviewed CI cleanup hooks before running jobs')"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Ensure pinned Rust toolchain
+        run: rustup toolchain install 1.95.0 --profile minimal --no-self-update --component rustfmt,clippy
+      - name: Test runner resource lifecycle
+        run: python3 -m unittest discover -s .github/runner -v
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+      - name: Lint runtime core
+        run: cargo clippy -p ua-desktop-core --all-targets -- -D warnings
+      - name: Test runtime core
+        run: cargo test -p ua-desktop-core
+      - name: Check desktop JavaScript
+        run: node --check ui/desktop-shell/app.js
+      - name: Test desktop interactions
+        run: node --test ui/desktop-shell/app.test.cjs
+
+  macos:
+    name: Universal macOS app
+    if: github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, macOS, ARM64, ua-build, ua-macos]
+    timeout-minutes: 45
+    steps:
+      - name: Require managed local runner
+        run: node -e "if (process.env.UA_CI_HOOK_VERSION !== '1' || process.env.UA_CI_BUILD_CACHE_VERSION !== '1') throw new Error('Install the reviewed CI cleanup hooks before running jobs')"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Ensure pinned Rust toolchain
+        run: rustup toolchain install 1.95.0 --profile minimal --no-self-update --target aarch64-apple-darwin,x86_64-apple-darwin
+      - name: Test workspace
+        run: cargo test --workspace --locked
+      - name: Compile universal application on pull requests
+        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && !inputs.package)
+        run: node .github/scripts/tauri-build.cjs --target universal-apple-darwin --no-bundle
+      - name: Build universal app and DMG
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.package)
+        env:
+          APPLE_SIGNING_IDENTITY: "-"
+        run: PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH" RUSTUP_TOOLCHAIN=1.95.0 node .github/scripts/tauri-build.cjs --target universal-apple-darwin --bundles app,dmg
+      - name: Verify universal binary and ad-hoc signature
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.package)
+        run: |
+          app="target/universal-apple-darwin/release/bundle/macos/Universal Agents.app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          # Command Line Tools 27 lipo rejects `<file> -verify_arch <archs>`
+          # ("requires exactly one input file"), so compare the listed archs.
+          archs=$(lipo -archs "$app/Contents/MacOS/universal-agents-desktop")
+          for arch in arm64 x86_64; do
+            case " $archs " in
+              *" $arch "*) ;;
+              *) echo "The macOS app is missing $arch (found: $archs)"; exit 1 ;;
+            esac
+          done
+      - name: Upload macOS development bundles
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.package)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          retention-days: 3
+          name: universal-agents-macos-universal-development
+          if-no-files-found: error
+          path: |
+            target/universal-apple-darwin/release/bundle/macos/*.app
+            target/universal-apple-darwin/release/bundle/dmg/*.dmg

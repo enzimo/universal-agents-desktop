@@ -1,0 +1,147 @@
+name: Compatibility list
+
+# Verifies changes to compatible-runtimes.json against UA's published releases
+# and merges automated UA release pull requests that pass every check.
+# See docs/COMPATIBILITY_LIST.md. GitHub auto-merge and branch protection are
+# unavailable for this private repository on its plan, so this workflow merges.
+
+on:
+  pull_request:
+    paths:
+      - compatible-runtimes.json
+      - compatibility/**
+      - scripts/check_compatibility_list.py
+      - tests/test_check_compatibility_list.py
+      - .github/workflows/compatibility-list.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compatibility-list-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: rtk proxy bash --noprofile --norc -e -o pipefail {0}
+
+jobs:
+  check:
+    name: Verify compatibility list
+    if: github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, Linux, X64, ua-build, ua-linux]
+    timeout-minutes: 15
+    steps:
+      - name: Require managed local runner
+        run: node -e "if (process.env.UA_CI_HOOK_VERSION !== '1' || process.env.UA_CI_BUILD_CACHE_VERSION !== '1') throw new Error('Install the reviewed CI cleanup hooks before running jobs')"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Check the exact pull request commit, not GitHub's merge preview, so
+          # the merge job can require that same commit. Full history provides
+          # the base branch's list for the append-only comparison.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Test the list checker
+        run: python3 -m unittest discover -s tests -p 'test_check_compatibility_list.py' -v
+      - name: Require UA read token
+        env:
+          UA_READ_TOKEN: ${{ secrets.UA_READ_TOKEN }}
+        run: |
+          if [[ -z "$UA_READ_TOKEN" ]]; then
+            message="The repository secret UA_READ_TOKEN is missing. Add a fine-grained token with read-only Contents access to enzimo/universal-agents; see docs/COMPATIBILITY_LIST.md."
+            echo "::error title=Missing UA_READ_TOKEN::$message"
+            echo "$message" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+      - name: Verify the list against UA releases
+        env:
+          GH_TOKEN: ${{ secrets.UA_READ_TOKEN }}
+          BASE_REF: ${{ github.event.pull_request.base.ref || 'main' }}
+        run: |
+          set +e
+          python3 scripts/check_compatibility_list.py --base-ref "origin/$BASE_REF" > check-report.txt 2>&1
+          status=$?
+          set -e
+          cat check-report.txt
+          {
+            echo "## Compatibility list check"
+            echo
+            echo '```text'
+            cat check-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+  merge:
+    name: Merge verified UA release entry
+    needs: check
+    # always() lets this job explain in the run summary why a pull request was
+    # left for a person, even when the check failed.
+    if: always() && github.event_name == 'pull_request' && github.event.repository.private && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, Linux, X64, ua-build, ua-linux]
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Require managed local runner
+        run: node -e "if (process.env.UA_CI_HOOK_VERSION !== '1' || process.env.UA_CI_BUILD_CACHE_VERSION !== '1') throw new Error('Install the reviewed CI cleanup hooks before running jobs')"
+      - name: Merge only a verified, list-only UA release pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECK_RESULT: ${{ needs.check.result }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          list_file=compatible-runtimes.json
+          reasons=()
+          if [[ "$CHECK_RESULT" != success ]]; then
+            reasons+=("The list check did not pass (result: $CHECK_RESULT). Its report is in the check job's summary above.")
+          fi
+          if [[ "$HEAD_REF" != ua-release/* ]]; then
+            reasons+=("The branch \`$HEAD_REF\` is not a \`ua-release/\` branch. Only UA's release automation is merged automatically.")
+          fi
+          if [[ "$HEAD_REPO" != "$GITHUB_REPOSITORY" ]]; then
+            reasons+=("The pull request comes from \`$HEAD_REPO\`, not from this repository.")
+          fi
+          pr_info=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" \
+            --jq '[.state, (.draft | tostring), .head.sha] | join(" ")')
+          read -r pr_state pr_draft pr_head <<<"$pr_info"
+          if [[ "$pr_state" != open || "$pr_draft" != false ]]; then
+            reasons+=("The pull request is closed or still a draft.")
+          fi
+          if [[ "$pr_head" != "$HEAD_SHA" ]]; then
+            reasons+=("New commits arrived after this check started; the run for the newest commit decides.")
+          fi
+          # Include rename sources: renaming another file onto the list would
+          # otherwise look like a list-only change.
+          files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER/files" \
+            --jq '.[] | .filename, (.previous_filename // empty)' | sort -u)
+          if [[ "$files" != "$list_file" ]]; then
+            reasons+=("The pull request changes files other than \`$list_file\`: $(paste -sd ' ' <<<"$files")")
+          fi
+
+          if ((${#reasons[@]})); then
+            {
+              echo "## Left for a person to review"
+              echo
+              echo "This pull request was not merged automatically because:"
+              echo
+              printf -- '- %s\n' "${reasons[@]}"
+            } >> "$GITHUB_STEP_SUMMARY"
+            printf '%s\n' "Not merged automatically:" "${reasons[@]}"
+            exit 0
+          fi
+
+          # --match-head-commit refuses the merge if the branch moved after the check.
+          gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --squash --delete-branch \
+            --match-head-commit "$HEAD_SHA"
+          {
+            echo "## Merged"
+            echo
+            echo "Pull request #$PR_NUMBER passed every compatibility check and changed only \`$list_file\`, so it was squash-merged and its branch deleted."
+          } >> "$GITHUB_STEP_SUMMARY"

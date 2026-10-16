@@ -1,0 +1,2104 @@
+/* Universal Agents Launcher (Status window).
+   Visual language follows Universal Agents' current design (ui/DESIGN.md in
+   the UA repository): frosted panes over the still background, Inter type,
+   7px controls, ocean primary actions and the Deep Ocean + Ember dark theme.
+   Desktop-specific choices are recorded in this repository's ui/DESIGN.md.
+
+   Theme tokens live in two blocks: light under :root and dark under
+   :root[data-color-mode="dark"] (theme.js sets the attribute; dark is the
+   default). Components use the tokens, so most rules need no dark override. */
+
+:root {
+  color-scheme: light;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  color: var(--ink);
+  background: #f8faf7;
+
+  --mono: "SFMono-Regular", ui-monospace, Consolas, "Liberation Mono", monospace;
+  --radius-control: 7px;
+  --radius-box: 10px;
+  --radius-group: 14px;
+
+  --ink: #10201c;
+  --muted: #334942;
+  /* Kickers, version line, links. Ocean rather than UA's teal kicker so small
+     text keeps 4.5:1 over the darkest corner of the light background. */
+  --accent-ink: #075985;
+  --focus: #075985;
+  --line: rgba(28, 69, 60, 0.16);
+  --inner-line: rgba(28, 69, 60, 0.14);
+
+  /* Panes are more opaque than UA Web Chat's (0.28-0.5) because the
+     launcher's small text must stay readable over the dark blue corner. */
+  --pane-fill:
+    linear-gradient(135deg, rgba(252, 255, 253, 0.88), rgba(237, 252, 251, 0.8));
+  --pane-border: rgba(28, 69, 60, 0.16);
+  --pane-shadow: 0 18px 48px rgba(3, 28, 42, 0.16);
+  --pane-filter: blur(22px) saturate(132%);
+
+  --control-fill: rgba(255, 255, 255, 0.62);
+  --control-border: rgba(16, 32, 28, 0.34);
+  --control-hover-fill: rgba(255, 255, 255, 0.86);
+  --control-hover-border: #075985;
+  --control-shadow: 0 10px 22px rgba(3, 28, 42, 0.1);
+  --input-fill: rgba(255, 255, 255, 0.82);
+
+  /* UA's ocean gradient, with a darker end (#0369a1 instead of #0284c7) so
+     white 13px labels keep 4.5:1. */
+  --primary-fill: linear-gradient(135deg, #075985, #0369a1);
+  --primary-hover-fill: linear-gradient(135deg, #064b70, #075985);
+  --primary-border: transparent;
+  --primary-hover-border: transparent;
+  --primary-ink: #ffffff;
+  --primary-shadow: 0 12px 26px rgba(3, 105, 161, 0.28);
+
+  --danger-fill: #b91c1c;
+  --danger-hover-fill: #991b1b;
+  --danger-border: rgba(185, 28, 28, 0.38);
+  --danger-hover-border: #7f1d1d;
+  --danger-ink: #ffffff;
+
+  /* Disabled controls change color explicitly instead of fading the whole
+     control (UA: fading also destroys label contrast). */
+  --disabled-fill: rgba(226, 232, 236, 0.78);
+  --disabled-border: rgba(16, 32, 28, 0.16);
+  --disabled-ink: #5b6b70;
+
+  /* Status meanings: green ready, amber transitional, neutral stopped, red
+     error. Text labels always accompany the color. */
+  --status-ready: #16a34a;
+  --status-busy: #b7791f;
+  --status-neutral: #64748b;
+  --status-error: #b91c1c;
+  --ready-fill: #dcfce7;
+  --ready-ink: #166534;
+  --ready-border: #398250;
+  --busy-fill: #fef3c7;
+  --busy-ink: #854d0e;
+  --busy-border: #a77217;
+  --neutral-fill: #e2e8f0;
+  --neutral-ink: #475569;
+  --neutral-border: #64748b;
+  --error-fill: #fee2e2;
+  --error-ink: #991b1b;
+  --error-border: #b91c1c;
+  /* Status words (no pill): dark enough for 4.5:1 on the light panes. */
+  --tag-ready: #166534;
+  --tag-busy: #854d0e;
+  --tag-error: #b91c1c;
+  --tag-neutral: #475569;
+
+  --log-fill: #0b151b;
+  --log-ink: #dce9f1;
+  --log-border: rgba(16, 32, 28, 0.24);
+  --switch-off: #c5d0d4;
+  --switch-on: #0369a1;
+  --progress: #0284c7;
+  --hint-fill: rgba(230, 244, 250, 0.72);
+
+  --modal-fill: linear-gradient(145deg, rgba(255, 255, 255, 0.97), rgba(238, 250, 255, 0.95));
+  --modal-border: rgba(7, 89, 133, 0.28);
+  --modal-shadow: 0 34px 120px rgba(3, 28, 42, 0.34);
+  --backdrop: rgba(3, 28, 42, 0.42);
+
+  /* The glass of the intro title (UA styles.css, light). glass_mesh.js reads
+     the two hex values; intro_word.js paints the word with start and end. */
+  --ua-glass-base: #e6f4fa;
+  --ua-glass-edge: #075985;
+  --ua-glass-start: rgba(255, 255, 255, 0.78);
+  --ua-glass-end: rgba(238, 250, 255, 0.7);
+  --ua-glass-outline: rgba(7, 89, 133, 0.75);
+  --ua-intro-word-fill-start: var(--ua-glass-start);
+  --ua-intro-word-fill-end: var(--ua-glass-end);
+  --ua-intro-word-fill: linear-gradient(135deg, var(--ua-intro-word-fill-start), var(--ua-intro-word-fill-end));
+  --ua-intro-word-outline: var(--ua-glass-outline);
+  /* "Click to Begin": a light pill in light mode so dark text stays legible
+     (UA uses its dark pill in both modes). */
+  --ua-intro-begin-fill: rgba(255, 255, 255, 0.72);
+  --ua-intro-begin-focus-fill: rgba(255, 255, 255, 0.95);
+  --ua-intro-beacon-glow: rgba(7, 89, 133, 0.3);
+}
+
+:root[data-color-mode="dark"] {
+  color-scheme: dark;
+  /* UA's dark UI canvas; also the native window color (tauri.conf.json), so
+     the window opens without a white flash before the background draws. */
+  background: #070b0e;
+
+  --dark-canvas: #070b0e;
+  --dark-pane: #0b151b;
+  --dark-control: #10232d;
+  --dark-raised: #173440;
+  --dark-border: #367287;
+  --dark-border-subtle: #294b58;
+  --dark-primary: #087697;
+  --dark-focus: #62d5f3;
+  --dark-ember: #f0a35a;
+  --dark-danger: #b94850;
+
+  --ink: #f2f7f8;
+  --muted: #adc1c8;
+  --accent-ink: var(--dark-focus);
+  --focus: var(--dark-focus);
+  --line: rgba(98, 213, 243, 0.24);
+  --inner-line: rgba(98, 213, 243, 0.19);
+
+  --pane-fill:
+    linear-gradient(135deg, rgba(23, 52, 64, 0.74), rgba(11, 21, 27, 0.7)),
+    rgba(7, 11, 14, 0.72);
+  --pane-border: rgba(98, 213, 243, 0.24);
+  --pane-shadow: 0 18px 48px rgba(0, 0, 0, 0.36);
+  --pane-filter: blur(24px) saturate(124%);
+
+  --control-fill: var(--dark-control);
+  --control-border: var(--dark-border);
+  --control-hover-fill: var(--dark-raised);
+  --control-hover-border: var(--dark-ember);
+  --control-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+  --input-fill: var(--dark-control);
+
+  --primary-fill: linear-gradient(135deg, var(--dark-primary), #076788);
+  --primary-hover-fill: linear-gradient(135deg, #0a7595, var(--dark-primary));
+  --primary-border: #299fc1;
+  --primary-hover-border: var(--dark-focus);
+  --primary-ink: #f7fbfc;
+  --primary-shadow: 0 12px 30px rgba(2, 53, 72, 0.36);
+
+  --danger-fill: var(--dark-danger);
+  --danger-hover-fill: #a43b43;
+  --danger-border: #db747a;
+  --danger-hover-border: #ff9297;
+  --danger-ink: #fff4f4;
+
+  --disabled-fill: #1a252b;
+  --disabled-border: #34434a;
+  --disabled-ink: #81949c;
+
+  --status-ready: #65d98b;
+  --status-busy: var(--dark-ember);
+  --status-neutral: #8292a6;
+  --status-error: #ff9297;
+  --ready-fill: #163c2b;
+  --ready-ink: #a7f3c0;
+  --ready-border: #56a779;
+  --busy-fill: #493917;
+  --busy-ink: #fde68a;
+  --busy-border: #c5a34f;
+  --neutral-fill: #293541;
+  --neutral-ink: #cbd5e1;
+  --neutral-border: #8292a6;
+  --error-fill: #3b1d22;
+  --error-ink: #fecaca;
+  --error-border: var(--dark-danger);
+  --tag-ready: var(--status-ready);
+  --tag-busy: var(--dark-ember);
+  --tag-error: var(--status-error);
+  --tag-neutral: var(--muted);
+
+  --log-fill: var(--dark-canvas);
+  --log-ink: #dce9f1;
+  --log-border: var(--dark-border-subtle);
+  --switch-off: #263e48;
+  --switch-on: var(--dark-primary);
+  --progress: #1597c2;
+  --hint-fill: var(--dark-control);
+
+  --modal-fill:
+    linear-gradient(145deg, rgba(23, 52, 64, 0.98), rgba(11, 21, 27, 0.97)),
+    rgba(7, 11, 14, 0.98);
+  --modal-border: rgba(98, 213, 243, 0.25);
+  --modal-shadow: 0 38px 130px rgba(0, 0, 0, 0.72);
+  --backdrop: rgba(0, 0, 0, 0.62);
+
+  --ua-glass-base: #11262f;
+  --ua-glass-edge: #62d5f3;
+  --ua-glass-start: rgba(23, 52, 64, 0.88);
+  --ua-glass-end: rgba(11, 21, 27, 0.84);
+  --ua-glass-outline: rgba(98, 213, 243, 0.75);
+  --ua-intro-begin-fill: rgba(7, 11, 14, 0.62);
+  --ua-intro-begin-focus-fill: rgba(23, 52, 64, 0.86);
+  --ua-intro-beacon-glow: rgba(98, 213, 243, 0.3);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  overflow-x: hidden;
+  background: transparent;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 0;
+  font-size: 23px;
+  font-weight: 880;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+h1:focus {
+  outline: none;
+}
+
+h2 {
+  margin-bottom: 0;
+  font-size: 18px;
+  font-weight: 880;
+  line-height: 1.3;
+  letter-spacing: 0;
+}
+
+h3 {
+  margin-bottom: 4px;
+  font-size: 15px;
+  font-weight: 820;
+  line-height: 1.3;
+}
+
+/* ---------- Still background ----------
+   vendor/static-mesh.js draws the light polygons on the page canvas;
+   vendor/metallic_mesh.js draws the dark metal on its own layer right after
+   it. Both draw once and redraw only on resize or a theme change. */
+.ua-doc-static-mesh {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* UA's dark scrim: a faint darkening toward the bottom of the metal. */
+.mesh-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+:root[data-color-mode="dark"] .mesh-scrim {
+  background:
+    radial-gradient(circle at 48% 38%, rgba(255, 255, 255, 0.025), transparent 44%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.03), rgba(0, 0, 0, 0.18));
+}
+
+/* ---------- Layout ---------- */
+
+.shell {
+  width: min(1360px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 34px 0 26px;
+}
+
+.topbar,
+.brand,
+.section-heading,
+.primary-actions,
+.control-row,
+.toggle-row {
+  display: flex;
+  align-items: center;
+}
+
+/* Frosted panes. Adjacent panes touch; spacing belongs inside each pane. */
+.topbar,
+.panel {
+  border: 1px solid var(--pane-border);
+  background: var(--pane-fill);
+  box-shadow: var(--pane-shadow);
+  -webkit-backdrop-filter: var(--pane-filter);
+  backdrop-filter: var(--pane-filter);
+}
+
+.topbar {
+  position: relative;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 0;
+  padding: 14px 18px;
+  border-radius: var(--radius-group) var(--radius-group) 0 0;
+}
+
+.panel {
+  border-radius: 0;
+}
+
+.brand {
+  gap: 13px;
+}
+
+.brand > div,
+.launch-grid > * {
+  min-width: 0;
+}
+
+/* The mark opens the UA project page; it looks like the mark, not a button. */
+.brand-link {
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  cursor: pointer;
+}
+
+.brand-link:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.brand-mark {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 20px rgba(1, 24, 38, 0.24));
+}
+
+/* The launcher title with the runtime state beside it. */
+.title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+}
+
+/* Launcher and UA versions, independent of each other. */
+.version-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 7px 0 0;
+}
+
+.version-chip {
+  padding: 3px 9px;
+  border: 1px solid var(--inner-line);
+  border-radius: 999px;
+  color: var(--accent-ink);
+  background: var(--control-fill);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+/* One aligned row: Updates, the Start/Restart/Stop group, status, theme. */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Two classes so the 38 px header height wins over the 44 px button default. */
+.header-control,
+.button.header-control {
+  min-height: 38px;
+  height: 38px;
+}
+
+.button.header-control {
+  padding: 0 14px;
+}
+
+.count-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 999px;
+  color: #1b1305;
+  background: var(--status-busy);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+/* Start, Restart and Stop as one joined group. */
+.segmented {
+  display: inline-flex;
+}
+
+.segmented .button {
+  margin-left: -1px;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.segmented .button:first-child {
+  margin-left: 0;
+  border-radius: var(--radius-control) 0 0 var(--radius-control);
+}
+
+.segmented .button:last-child {
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+}
+
+.segmented .button:hover:not(:disabled),
+.segmented .button:focus-visible {
+  position: relative;
+  z-index: 1;
+  transform: none;
+}
+
+.eyebrow,
+.section-kicker {
+  margin-bottom: 5px;
+  color: var(--accent-ink);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.launch-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 0;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  align-content: start;
+  padding: 23px;
+}
+
+.hero h2 {
+  max-width: 650px;
+  font-size: clamp(24px, 3vw, 34px);
+  line-height: 1.15;
+}
+
+.status-detail {
+  max-width: 700px;
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.primary-actions,
+.control-row {
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.section-heading {
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.workspace-card {
+  min-width: 0;
+  padding: 23px;
+}
+
+.workspace-card .access-heading p {
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+/* Advanced Settings: optional or rarely needed sections, collapsed side by side. */
+.advanced-card {
+  padding: 23px;
+}
+
+.advanced-card h2 {
+  margin-bottom: 14px;
+}
+
+.advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+
+.advanced-item {
+  min-width: 0;
+  border: 1px solid var(--inner-line);
+  border-radius: var(--radius-box);
+  background: var(--control-fill);
+}
+
+:root[data-color-mode="dark"] .advanced-item {
+  background: rgba(11, 21, 27, 0.82);
+}
+
+.collapsible > summary {
+  display: flex;
+  list-style: none;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  min-height: 48px;
+  padding: 0 16px;
+  border-radius: var(--radius-box);
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 820;
+}
+
+/* The row layout drops the native disclosure triangle, so a chevron shows
+   whether the section is open (right when closed, down when open). */
+.collapsible > summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible > summary > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.collapsible > summary > span:first-child::before {
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  content: "";
+  transform: rotate(-45deg);
+  transition: transform 120ms ease;
+}
+
+.collapsible[open] > summary > span:first-child::before {
+  transform: rotate(45deg);
+}
+
+.collapsible > summary:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* A whole pane that collapses (Controls): its title reads as a pane heading. */
+.collapsible > summary.pane-summary {
+  min-height: 0;
+  padding: 0;
+  font-size: 18px;
+  font-weight: 880;
+}
+
+.advanced-wide {
+  grid-column: 1 / -1;
+}
+
+.advanced-content {
+  padding: 4px 16px 16px;
+}
+
+.access-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.access-heading p,
+.access-detail,
+.source-row,
+.auth-help p {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.access-heading p {
+  margin-bottom: 0;
+}
+
+.access-detail {
+  min-height: 34px;
+  margin: 0 0 12px;
+}
+
+.access-detail code,
+.source-row code,
+.auth-help code {
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.source-row {
+  margin: -4px 0 12px;
+}
+
+.path-value {
+  display: block;
+  margin: 14px 0 10px;
+  padding: 9px 10px;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--inner-line);
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  background: var(--input-fill);
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.auth-help {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.auth-help summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.auth-help p {
+  margin: 8px 0 0;
+}
+
+/* The last pane of the group rounds its outside corners. */
+.settings-card {
+  position: relative;
+  padding: 23px;
+  border-radius: 0 0 var(--radius-group) var(--radius-group);
+}
+
+.settings-content {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px;
+  align-items: start;
+}
+
+.settings-grid .facts {
+  margin: 0;
+}
+
+.shell > .notice {
+  margin: 0;
+  border-radius: 0;
+}
+
+.facts {
+  margin: 22px 0;
+  border-top: 1px solid var(--inner-line);
+}
+
+.facts div {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--inner-line);
+}
+
+.facts dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.facts dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.toggle-row {
+  justify-content: space-between;
+  gap: 20px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.toggle-row + .toggle-row {
+  margin-top: 14px;
+}
+
+.toggle-row strong,
+.toggle-row small {
+  display: block;
+}
+
+.toggle-row strong {
+  font-size: 13px;
+  font-weight: 820;
+}
+
+.toggle-row small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* Logs and release notes: selectable plain text. */
+pre {
+  height: 260px;
+  margin: 0;
+  padding: 14px;
+  overflow: auto;
+  border: 1px solid var(--log-border);
+  border-radius: var(--radius-box);
+  color: var(--log-ink);
+  background: var(--log-fill);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.release-notes {
+  max-height: 360px;
+  height: auto;
+  padding: 14px;
+  overflow: auto;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--inner-line);
+  border-radius: var(--radius-box);
+  color: var(--ink);
+  background: var(--input-fill);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+/* The acknowledgment is a switch row: the sentence on the left, the switch
+   on the right, like the switches in Controls. */
+.update-ack {
+  margin: 14px 0 16px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+/* Log tools: line count, Live/Paused with pause or play, expand, download. */
+/* The log tools sit on the section's title row, at its right, while the
+   section is open. They live in the content because a summary must not
+   contain buttons. */
+#logs-section {
+  position: relative;
+}
+
+.logs-toolbar {
+  position: absolute;
+  top: 5px;
+  right: 16px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.log-lines {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.log-lines input {
+  width: 84px;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  background: var(--input-fill);
+  font-variant-numeric: tabular-nums;
+}
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+}
+
+.tool-icon {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.icon-play {
+  fill: currentColor;
+}
+
+.icon-play,
+.icon-collapse,
+.is-paused .icon-pause,
+body.logs-expanded .icon-expand {
+  display: none;
+}
+
+.is-paused .icon-play,
+body.logs-expanded .icon-collapse {
+  display: block;
+}
+
+/* Expanding the logs gives a taller reading surface without leaving the
+   window. The header's runtime controls stay visible above it for a quick stop. */
+body.logs-expanded #logs {
+  height: min(70vh, 900px);
+}
+
+/* ---------- Controls ---------- */
+
+.button,
+.icon-button {
+  appearance: none;
+  border: 1px solid transparent;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    transform 120ms ease,
+    background 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: var(--radius-control);
+  font-size: 13px;
+  font-weight: 820;
+  text-decoration: none;
+}
+
+.button:hover:not(:disabled),
+.icon-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.button:focus-visible,
+.icon-button:focus-visible,
+input:focus-visible,
+summary:focus-visible,
+.docs-link:focus-visible,
+pre:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.button-primary {
+  border-color: var(--primary-border);
+  color: var(--primary-ink);
+  background: var(--primary-fill);
+  box-shadow: var(--primary-shadow);
+}
+
+.button-primary:hover:not(:disabled) {
+  border-color: var(--primary-hover-border);
+  background: var(--primary-hover-fill);
+}
+
+.button-secondary,
+.button-quiet,
+.icon-button {
+  border-color: var(--control-border);
+  color: var(--ink);
+  background: var(--control-fill);
+  box-shadow: var(--control-shadow);
+}
+
+.button-secondary:hover:not(:disabled),
+.button-quiet:hover:not(:disabled),
+.icon-button:hover:not(:disabled) {
+  border-color: var(--control-hover-border);
+  background: var(--control-hover-fill);
+}
+
+.button-quiet {
+  min-height: 38px;
+  padding: 0 14px;
+  box-shadow: none;
+}
+
+.button-danger {
+  border-color: var(--danger-border);
+  color: var(--danger-ink);
+  background: var(--danger-fill);
+}
+
+.button-danger:hover:not(:disabled) {
+  border-color: var(--danger-hover-border);
+  background: var(--danger-hover-fill);
+}
+
+/* "Stop UA and quit" spins and keeps its color while UA stops. */
+.button-spinner {
+  display: none;
+}
+
+.button.is-working .button-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-right: 9px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: update-spin 800ms linear infinite;
+}
+
+.button-danger.is-working:disabled {
+  border-color: var(--danger-border);
+  color: var(--danger-ink);
+  background: var(--danger-fill);
+  cursor: wait;
+}
+
+.button-compact {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+.icon-button {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-control);
+  font-size: 19px;
+}
+
+.button:disabled,
+.icon-button:disabled {
+  border-color: var(--disabled-border);
+  color: var(--disabled-ink);
+  background: var(--disabled-fill);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.operation-busy .button:disabled,
+.operation-busy .icon-button:disabled {
+  cursor: wait;
+}
+
+.docs-link {
+  color: var(--accent-ink);
+  font-size: 13px;
+  font-weight: 800;
+  text-underline-offset: 3px;
+}
+
+/* Theme switch: one header icon button. The sun shows in dark mode (it
+   switches to light) and the moon in light mode (it switches to dark). */
+.theme-toggle {
+  display: inline-grid;
+  place-items: center;
+}
+
+.theme-icon {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+:root[data-color-mode="dark"] .theme-toggle {
+  color: var(--dark-ember);
+}
+
+:root[data-color-mode="dark"] .theme-icon-moon,
+:root[data-color-mode="light"] .theme-icon-sun {
+  display: none;
+}
+
+/* One-time background fill as the intro starts (UA's fillBackground). The
+   dark metal fades in through UAMetallicMesh.reveal; this fades the light
+   polygons. intro.js holds the background blank until the fill starts. */
+:root[data-ua-background-hold] [data-ua-metallic-mesh] {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root.ua-intro-filling [data-ua-metallic-mesh] {
+    animation: ua-fill 1.8s ease-out both;
+  }
+}
+
+@keyframes ua-fill {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.registry-form {
+  display: grid;
+  gap: 8px;
+  max-width: 460px;
+  margin-top: 12px;
+}
+
+.registry-form label {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.registry-form input {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-control);
+  color: var(--ink);
+  background: var(--input-fill);
+}
+
+.registry-form input:disabled {
+  border-color: var(--disabled-border);
+  color: var(--disabled-ink);
+  background: var(--disabled-fill);
+}
+
+/* Switches: ocean when on, neutral when off. */
+input[role="switch"] {
+  appearance: none;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 24px;
+  margin: 0;
+  border: 1px solid var(--control-border);
+  border-radius: 999px;
+  background: var(--switch-off);
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+
+input[role="switch"]::after {
+  display: block;
+  width: 18px;
+  height: 18px;
+  margin: 2px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(34, 62, 82, 0.24);
+  content: "";
+  transition: transform 140ms ease;
+}
+
+input[role="switch"]:checked {
+  border-color: var(--switch-on);
+  background: var(--switch-on);
+}
+
+input[role="switch"]:checked::after {
+  transform: translateX(18px);
+}
+
+input[role="switch"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ---------- Status ---------- */
+
+/* Status words: the state in its colour, with no border or fill. The word
+   itself always carries the meaning. */
+.status-text,
+.mini-badge {
+  flex: 0 0 auto;
+  color: var(--tag-neutral);
+  font-weight: 850;
+}
+
+.status-text {
+  font-size: 14px;
+}
+
+.mini-badge {
+  font-size: 11px;
+}
+
+.status-text.status-ready,
+.status-text.status-onboarding,
+.badge-external,
+.badge-imported,
+.badge-running {
+  color: var(--tag-ready);
+}
+
+.status-text.status-starting,
+.badge-pending_import,
+.badge-paused {
+  color: var(--tag-busy);
+}
+
+.status-text.status-error,
+.status-text.status-startup_failed,
+.status-text.status-docker_unavailable,
+.badge-source_unavailable,
+.badge-unavailable {
+  color: var(--tag-error);
+}
+
+.badge-selected {
+  color: var(--accent-ink);
+}
+
+/* Failures: the danger color as a left border on a tinted background. */
+.notice,
+.access-warning {
+  border: 1px solid var(--error-border);
+  border-left-width: 4px;
+  color: var(--error-ink);
+  background: var(--error-fill);
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.notice {
+  margin-top: 14px;
+  padding: 12px 15px;
+  border-radius: var(--radius-box);
+  font-size: 13px;
+}
+
+.access-warning {
+  margin: 0 0 12px;
+  padding: 10px 11px;
+  border-radius: var(--radius-control);
+  font-size: 11px;
+}
+
+/* One operation row under the header, shared by installs, sign-in, restarts
+   and updates, so the header buttons never move. */
+.operation-progress {
+  padding: 10px 18px 12px;
+  border: 1px solid var(--pane-border);
+  border-top: 0;
+  background: var(--pane-fill);
+  -webkit-backdrop-filter: var(--pane-filter);
+  backdrop-filter: var(--pane-filter);
+}
+
+.operation-progress progress {
+  display: block;
+  width: 100%;
+  height: 8px;
+  accent-color: var(--progress);
+}
+
+.operation-progress p {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.operation-progress[hidden],
+.operation-progress progress[hidden] {
+  display: none;
+}
+
+/* Docker prerequisite banner and update banner. They share the pane edges;
+   the icon is never the only signal. */
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 13px 18px;
+  border: 1px solid var(--pane-border);
+  border-top: 0;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.banner .banner-icon {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.banner-warning {
+  border-color: var(--busy-border);
+  color: var(--busy-ink);
+  background: var(--busy-fill);
+}
+
+.banner-warning .banner-icon {
+  background: var(--status-busy);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-busy) 24%, transparent);
+}
+
+.banner-success {
+  border-color: var(--ready-border);
+  color: var(--ready-ink);
+  background: var(--ready-fill);
+}
+
+.banner-success .banner-icon {
+  background: var(--status-ready);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-ready) 24%, transparent);
+}
+
+/* While Docker is missing the launcher stays usable for recovery actions, but
+   runtime controls that need the daemon are disabled and clearly marked. */
+body.docker-blocked .hero {
+  border-color: var(--error-border);
+}
+
+/* Floating update badge: the most useful update item. It hides after 5 s or
+   when dismissed and shows again at the update's next stage. The open button
+   and the dismiss button sit side by side, never nested. */
+.update-badge {
+  position: fixed;
+  right: 26px;
+  bottom: 26px;
+  z-index: 40;
+  display: flex;
+  align-items: flex-start;
+  max-width: min(380px, calc(100% - 40px));
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-group);
+  color: var(--ink);
+  background: var(--modal-fill);
+  box-shadow: var(--modal-shadow);
+  -webkit-backdrop-filter: var(--pane-filter);
+  backdrop-filter: var(--pane-filter);
+  transition: transform 120ms ease, border-color 120ms ease;
+}
+
+.update-badge:hover {
+  transform: translateY(-2px);
+  border-color: var(--control-hover-border);
+}
+
+.update-badge-open {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px 6px 12px 16px;
+  border: 0;
+  border-radius: var(--radius-group);
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.update-badge-dismiss {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin: 6px 6px 0 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.update-badge-dismiss:hover {
+  color: var(--ink);
+  background: var(--control-hover-fill);
+}
+
+.update-badge-dismiss svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.update-badge-open:focus-visible,
+.update-badge-dismiss:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.update-badge-ring {
+  position: relative;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border: 2px solid var(--control-border);
+  border-radius: 50%;
+}
+
+.update-badge-ring::after {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.update-badge.is-available .update-badge-ring,
+.update-badge.is-launcher .update-badge-ring {
+  border-color: var(--accent-ink);
+}
+
+.update-badge.is-available .update-badge-ring::after,
+.update-badge.is-launcher .update-badge-ring::after {
+  color: var(--accent-ink);
+  content: "\2193";
+}
+
+/* Spinning ring while the size is unknown; a filling ring once Docker
+   reports layer sizes. Reduced motion stops the spin. */
+.update-badge.is-downloading .update-badge-ring {
+  border-top-color: var(--accent-ink);
+  animation: update-spin 900ms linear infinite;
+}
+
+.update-badge.is-downloading.has-percent .update-badge-ring {
+  border: 0;
+  background: conic-gradient(var(--progress) var(--badge-progress, 0%), var(--switch-off) 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+  animation: none;
+}
+
+.update-badge.is-downloaded .update-badge-ring {
+  border-color: var(--status-ready);
+  background: color-mix(in srgb, var(--status-ready) 14%, transparent);
+}
+
+.update-badge.is-downloaded .update-badge-ring::after {
+  color: var(--status-ready);
+  content: "\2713";
+}
+
+.update-badge-copy {
+  min-width: 0;
+}
+
+.update-badge-copy strong,
+.update-badge-copy small {
+  display: block;
+}
+
+.update-badge-copy strong {
+  font-size: 13px;
+  font-weight: 820;
+}
+
+.update-badge-copy small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* Updates drawer: a modal dialog sliding in from the right. */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: var(--backdrop);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+.drawer {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(560px, 100%);
+  padding: 22px 22px 28px;
+  overflow-y: auto;
+  border-left: 1px solid var(--modal-border);
+  color: var(--ink);
+  background: var(--modal-fill);
+  box-shadow: var(--modal-shadow);
+}
+
+.drawer-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.drawer-header > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.drawer-header h2 {
+  font-size: 22px;
+}
+
+.drawer-header h2:focus {
+  outline: none;
+}
+
+.drawer-close {
+  display: inline-grid;
+  place-items: center;
+}
+
+.drawer-close svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.drawer-note {
+  margin: -6px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.drawer .notice {
+  margin: 0;
+}
+
+.lane {
+  padding: 16px;
+  border: 1px solid var(--inner-line);
+  border-radius: var(--radius-box);
+}
+
+.lane-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.lane-heading h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.from-to {
+  color: var(--accent-ink);
+  font-size: 13px;
+  font-weight: 820;
+  font-variant-numeric: tabular-nums;
+}
+
+.lane-status {
+  margin: 8px 0 0;
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+/* Cautions before a switch: unchecked versions, breaking changes, and why
+   nothing can be installed. Amber with a text label, never color alone. */
+.lane-warning {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--busy-border);
+  border-left-width: 4px;
+  border-radius: var(--radius-control);
+  color: var(--busy-ink);
+  background: var(--busy-fill);
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.lane-note {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* Steps: a ring per step joined by a line. Done steps are green with a tick,
+   the next step has an ocean ring; screen readers hear "Done" or "Next". */
+.steps {
+  display: grid;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  column-gap: 10px;
+  padding-bottom: 14px;
+  font-size: 13.5px;
+}
+
+.step::before {
+  grid-row: 1 / span 2;
+  grid-column: 1;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--switch-off);
+  border-radius: 50%;
+  content: "";
+}
+
+.step::after {
+  position: absolute;
+  top: 24px;
+  bottom: 2px;
+  left: 10px;
+  width: 2px;
+  background: var(--switch-off);
+  content: "";
+}
+
+.step:last-child {
+  padding-bottom: 0;
+}
+
+.step:last-child::after {
+  display: none;
+}
+
+.step b,
+.step small {
+  grid-column: 2;
+}
+
+.step b {
+  font-weight: 820;
+}
+
+.step small {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.step.is-done::before {
+  border-color: var(--status-ready);
+  background: var(--status-ready) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23070b0e' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 14px no-repeat;
+}
+
+.step.is-done::after {
+  background: var(--status-ready);
+}
+
+.step.is-now::before {
+  border-color: var(--progress);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--progress) 24%, transparent);
+}
+
+.step.is-now b {
+  color: var(--accent-ink);
+}
+
+.review {
+  margin-top: 14px;
+}
+
+.other-versions h4 {
+  margin: 0 0 8px;
+  font-size: 13.5px;
+  font-weight: 820;
+}
+
+.review .release-notes {
+  max-height: 260px;
+  margin-top: 8px;
+}
+
+/* Release notes collapse to a heading-sized row with a chevron. */
+.collapsible.review-notes > summary {
+  min-height: 0;
+  padding: 0;
+  font-size: 13.5px;
+}
+
+.review .update-ack {
+  margin-bottom: 0;
+}
+
+.lane-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.other-versions {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--inner-line);
+}
+
+.other-versions .lane-note {
+  margin-top: 0;
+}
+
+.catalog {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 16px;
+  padding: 0;
+  list-style: none;
+}
+
+.catalog:empty {
+  display: none;
+}
+
+.catalog-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 10px;
+  min-height: 46px;
+  padding: 6px 10px;
+  border: 1px solid var(--inner-line);
+  border-radius: var(--radius-control);
+  font-size: 13px;
+}
+
+.catalog-row.is-selected {
+  border-color: var(--accent-ink);
+}
+
+.catalog-version {
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.catalog-facts {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.catalog-action {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.catalog-older {
+  max-width: 120px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.3;
+  text-align: right;
+}
+
+/* Text for screen readers only. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+@keyframes update-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Blocking prerequisite dialog. */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--backdrop);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+.modal {
+  position: relative;
+  width: min(560px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 26px;
+  border: 1px solid var(--modal-border);
+  border-radius: var(--radius-group);
+  color: var(--ink);
+  background: var(--modal-fill);
+  box-shadow: var(--modal-shadow);
+}
+
+.modal h2 {
+  color: var(--accent-ink);
+}
+
+.modal-detail,
+.modal-hint,
+.modal-note {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.modal-detail {
+  margin: 10px 0 0;
+}
+
+.modal-hint {
+  margin: 12px 0 0;
+  padding: 11px 13px;
+  border: 1px solid var(--inner-line);
+  border-radius: var(--radius-box);
+  background: var(--hint-fill);
+}
+
+.modal-hint:empty {
+  display: none;
+}
+
+.modal-actions {
+  margin-top: 18px;
+}
+
+.modal-note {
+  margin: 14px 0 0;
+  font-size: 11px;
+}
+
+/* Corner brackets: short accent lines at the top-left and bottom-right of
+   dark panels (UA's HUD frame), and of the dialog in both modes. Still. */
+:root[data-color-mode="dark"] .topbar::before,
+:root[data-color-mode="dark"] .settings-card::after,
+.modal::before,
+.modal::after {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-color: var(--ua-motion-accent, #f0a35a);
+  border-style: solid;
+  opacity: 0.55;
+  pointer-events: none;
+  content: "";
+}
+
+:root[data-color-mode="dark"] .topbar::before,
+.modal::before {
+  top: -1px;
+  left: -1px;
+  border-width: 2px 0 0 2px;
+  border-top-left-radius: 12px;
+}
+
+:root[data-color-mode="dark"] .settings-card::after,
+.modal::after {
+  right: -1px;
+  bottom: -1px;
+  border-width: 0 2px 2px 0;
+  border-bottom-right-radius: 12px;
+}
+
+.modal::before {
+  top: 0;
+  left: 0;
+}
+
+.modal::after {
+  right: 0;
+  bottom: 0;
+}
+
+/* ---------- Intro (intro.js, vendor/intro_word.js) ----------
+   Adapted from UA's onboarding intro styles. The launcher waits hidden and
+   inert under the overlay until the intro is dismissed. */
+:root.ua-intro-open body {
+  overflow: hidden;
+}
+
+:root.ua-intro-open .shell {
+  opacity: 0;
+}
+
+:root.ua-intro-open .update-badge {
+  visibility: hidden;
+}
+
+.ua-intro {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 18px;
+  padding: 24px;
+  cursor: pointer;
+  text-align: center;
+}
+
+/* The dialog itself only receives focus so screen readers announce it; the
+   button takes visible focus as soon as it shows. */
+.ua-intro:focus {
+  outline: none;
+}
+
+/* "Universal Agents" in the interface glass with a 1px outline from the SVG
+   filter (never -webkit-text-stroke, which traces strokes inside letters). */
+.ua-intro-title {
+  position: relative;
+  margin: 0;
+  color: transparent;
+  font-size: clamp(2rem, 7vw, 5.5rem);
+  font-weight: 880;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+  opacity: 0;
+}
+
+/* Styled text where the polygon word is unavailable. */
+.ua-intro-title:not(.has-polygon-word) {
+  background: var(--ua-intro-word-fill);
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: url(#ua-intro-outline);
+}
+
+.ua-intro-word-slab,
+.ua-intro-word-forming,
+.ua-intro-word-settled,
+.ua-intro-word-facets {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.ua-intro-word-facets {
+  filter: url(#ua-intro-outline);
+}
+
+/* The word stays text for screen readers. */
+.ua-intro-word-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+/* The outline filter's hidden SVG and its color (UA sets both with style
+   attributes, which this window's CSP blocks). */
+.ua-intro-outline-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+
+.ua-intro-outline-color {
+  flood-color: var(--ua-intro-word-outline);
+}
+
+/* "Click to Begin" shares the word's outline color. Keyboard focus lightens
+   its fill instead of adding a separate ring (UA). */
+.ua-intro-begin {
+  padding: 10px 22px;
+  border: 1px solid var(--ua-intro-word-outline);
+  border-radius: 999px;
+  color: var(--ink);
+  background: var(--ua-intro-begin-fill);
+  cursor: pointer;
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0;
+}
+
+.ua-intro.show-title .ua-intro-title,
+.ua-intro.show-begin .ua-intro-begin {
+  opacity: 1;
+}
+
+.ua-intro-begin:focus {
+  outline: none;
+}
+
+.ua-intro-begin:focus-visible,
+.ua-intro-begin:hover {
+  background: var(--ua-intro-begin-focus-fill);
+}
+
+.ua-intro.is-leaving {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 850px) {
+  .hero,
+  .advanced-grid,
+  .settings-grid,
+  .launch-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .primary-actions {
+    justify-content: flex-start;
+  }
+
+  .update-badge {
+    right: 14px;
+    bottom: 14px;
+  }
+
+  .catalog-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .catalog-facts {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
+@media (max-width: 500px) {
+  .shell {
+    width: calc(100% - 24px);
+    padding-top: 12px;
+  }
+
+  .brand-mark {
+    width: 36px;
+    height: 36px;
+  }
+
+  h1 {
+    font-size: 21px;
+  }
+
+  .header-actions {
+    gap: 10px;
+  }
+
+  .access-heading {
+    flex-wrap: wrap;
+  }
+}
+
+/* ---------- Motion ----------
+   Brief and functional; everything here stops with reduced motion. The
+   background never moves. */
+@media (prefers-reduced-motion: no-preference) {
+  .ua-intro.is-animated .ua-intro-title,
+  .ua-intro.is-animated .ua-intro-begin {
+    transform: translateY(10px);
+    transition: opacity 600ms ease-out, transform 600ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .ua-intro.is-animated.show-title .ua-intro-title,
+  .ua-intro.is-animated.show-begin .ua-intro-begin {
+    transform: none;
+  }
+
+  /* The button glows slowly until the intro settles (intro.js IDLE_STILL_MS). */
+  .ua-intro.is-animated.show-begin:not(.is-still) .ua-intro-begin {
+    animation: ua-beacon 2.6s ease-in-out 600ms infinite;
+  }
+
+  .ua-intro.is-leaving {
+    transition: opacity 450ms ease-out;
+  }
+
+  .ua-intro-enter {
+    animation: ua-assemble 600ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  @keyframes ua-beacon {
+    0%, 100% { box-shadow: 0 0 0 0 transparent; }
+    50% { box-shadow: 0 0 22px 2px var(--ua-intro-beacon-glow); }
+  }
+
+  @keyframes ua-assemble {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: none; }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+
+  .update-badge.is-downloading .update-badge-ring,
+  .button.is-working .button-spinner {
+    animation: none;
+  }
+
+  .operation-progress progress {
+    appearance: none;
+    border: 0;
+    background: var(--progress);
+  }
+
+  .operation-progress progress::-webkit-progress-bar {
+    background: var(--progress);
+  }
+
+  .operation-progress progress::-webkit-progress-inner-element {
+    animation: none;
+  }
+}

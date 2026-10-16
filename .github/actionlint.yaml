@@ -1,0 +1,6 @@
+self-hosted-runner:
+  labels:
+    - ua-build
+    - ua-windows
+    - ua-linux
+    - ua-macos
