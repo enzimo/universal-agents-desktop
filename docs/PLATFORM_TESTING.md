@@ -36,7 +36,7 @@ Configure a Docker credential helper before using the launcher's GitHub CLI or P
 
 For automated native launcher checks on Mac and Windows, follow [the UI test setup](../tests/ui/README.md). It records screenshots and tests the real bundled UI against a simulated runtime boundary. The checklist below covers the remaining real-host acceptance work.
 
-1. Install and open the launcher. Confirm the title intro and **Click to Begin**, the one-time background fill, the dark default appearance and the sun/moon theme switch, both versions, collapsed image access, and header controls.
+1. Install and open the launcher. Confirm the title intro and **Click to Begin**, the one-time background fill, the first-run note that agents need a computer that stays on (with this system's sleep setting; it must not show on the next launch), the dark default appearance and the sun/moon theme switch, both versions, collapsed image access, and header controls.
 2. With Docker stopped, verify actionable status; start Docker and verify recovery.
 3. Choose a workspace whose path includes spaces. Choose an `auth.json` outside that workspace and app data. Verify overlapping paths are rejected.
 4. Install/start the runtime (sign into GHCR only if access is required). Confirm the local setup page opens and Codex import allows the connection test. Complete onboarding and send a chat message.

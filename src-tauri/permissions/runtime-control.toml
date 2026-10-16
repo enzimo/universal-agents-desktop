@@ -6,6 +6,7 @@ commands.allow = [
   "begin_github_login",
   "runtime_status",
   "desktop_version",
+  "keep_awake_hint",
   "check_runtime_updates",
   "download_runtime_update",
   "install_runtime_update",

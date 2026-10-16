@@ -4,6 +4,8 @@ Download [Desktop 0.6.1](https://github.com/enzimo/universal-agents-desktop/rele
 
 Already using a hosted service? Open its URL in your browser and sign in. You do not need local Docker or the desktop launcher; choose **Hosted server** in the guide.
 
+**Agents need a computer that stays on.** The app runs UA on this computer, and agents stop working while it sleeps. Set it not to sleep while plugged in (the app names the setting the first time it opens), or, if you are comfortable with Docker, run UA on a server with the setup guide instead.
+
 ## 0. Get access
 
 The desktop app, the UA runtime image and the setup guide are private. You need a GitHub account that the maintainer has invited.
@@ -22,10 +24,12 @@ The desktop app, the UA runtime image and the setup guide are private. You need 
 - **macOS:** install [Homebrew](https://brew.sh), then run:
 
   ```sh
-  brew install colima docker
+  brew install colima docker docker-credential-helper
   colima start universal-agents --cpu 2 --memory 4 --disk 40
   docker context use colima-universal-agents
   ```
+
+  Then set `"credsStore": "osxkeychain"` in `~/.docker/config.json` (create the file if it does not exist), so Docker can save your GitHub login in the Keychain.
 
 - **Windows 11 x64:** run `wsl --install` in administrator PowerShell and restart if prompted. Install [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/), choose its WSL 2 backend, and start it in **Linux containers** mode. Install the native Windows app outside WSL.
 - **Ubuntu 24.04 x64 desktop:** install [Docker Engine](https://docs.docker.com/engine/install/ubuntu/) and enable [access for your normal user](https://docs.docker.com/engine/install/linux-postinstall/). Sign out and back in after changing group membership.
@@ -57,7 +61,7 @@ The macOS app is ad-hoc signed and not notarized, and Windows installers are uns
 
 ## 3. Open Universal Agents
 
-1. Open the app and choose **Click to Begin** on the title screen. Expand **Advanced Settings > Private Image Access** and choose **Use GitHub CLI** to give Docker your GitHub login from step 0. Then choose **Start**. Leave the Status window open while it downloads the runtime image.
+1. Open the app and choose **Click to Begin** on the title screen, then **Got it** on the note about keeping the computer on. Expand **Advanced Settings > Private Image Access** and choose **Use GitHub CLI**. It gives Docker your GitHub login from step 0 and then downloads and starts UA. Leave the Status window open while it downloads the runtime image.
 2. Under **Agent workspace**, optionally choose a project folder agents may read and change. Agents see it as the team's shared folder, `team/team-shared`. With Colima on macOS, pick a folder inside your home folder. Otherwise keep the app-managed folder.
 3. At **Setup ready**, choose **Open in app**. Enter your user and assistant names, select a model provider and model, add its credential, and use **Test Connection**. Keep local storage and Web Chat defaults for your first run.
 4. Save the access token shown during setup, choose **Launch team**, sign in, and send a message. Type `/tour` for a walkthrough.

@@ -133,6 +133,13 @@ fn desktop_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
 }
 
+/// The sleep setting to change on this computer, for the first-run notice
+/// that agents need a computer that stays on.
+#[tauri::command]
+fn keep_awake_hint() -> &'static str {
+    ua_desktop_core::platform::Host::current().keep_awake_hint()
+}
+
 #[tauri::command]
 async fn runtime_status(state: State<'_, AppState>) -> Result<RuntimeStatus, String> {
     let controller = Arc::clone(&state.controller);
@@ -770,6 +777,7 @@ pub fn run() {
             begin_github_login,
             runtime_status,
             desktop_version,
+            keep_awake_hint,
             check_runtime_updates,
             download_runtime_update,
             install_runtime_update,

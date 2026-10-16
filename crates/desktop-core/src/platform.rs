@@ -42,6 +42,23 @@ impl Host {
         }
     }
 
+    /// Where to stop this computer from sleeping, for the first-run notice
+    /// that agents need a computer that stays on. Fixed text per OS, like the
+    /// Docker hint, so the renderer never guesses the system it runs on.
+    pub fn keep_awake_hint(self) -> &'static str {
+        match self {
+            Self::Mac => {
+                "On a MacBook, open System Settings > Battery > Options and turn on \"Prevent automatic sleeping on power adapter when the display is off\", then keep it plugged in with the lid open. On a desktop Mac, use System Settings > Energy."
+            }
+            Self::Windows => {
+                "Open Settings > System > Power & battery > Screen, sleep & hibernate timeouts and set sleep to Never when plugged in. On a laptop, also set closing the lid to Do nothing in Control Panel > Power Options."
+            }
+            Self::Linux => {
+                "Open Settings > Power and turn off Automatic Suspend (on a laptop, at least when plugged in)."
+            }
+        }
+    }
+
     /// Official Docker installation instructions for this host.
     ///
     /// A fixed per-OS page keeps the prerequisite dialog actionable without
@@ -229,6 +246,13 @@ mod tests {
             Host::Linux.docker_install_url()
         );
         assert!(DOCKER_SETUP_GUIDE_URL.starts_with("https://"));
+    }
+
+    #[test]
+    fn keep_awake_hints_name_each_system_settings_app() {
+        assert!(Host::Mac.keep_awake_hint().contains("System Settings"));
+        assert!(Host::Windows.keep_awake_hint().contains("Power & battery"));
+        assert!(Host::Linux.keep_awake_hint().contains("Automatic Suspend"));
     }
 
     #[test]
