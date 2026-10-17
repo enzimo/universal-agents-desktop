@@ -111,7 +111,7 @@ Route every shell command through RTK. Use a native wrapper such as `rtk git`, `
 ### Core invariants
 - Record hard behavioral, data, API, security, and operational constraints that changes must preserve.
 - Use `logging`, not `print`, for runtime output.
-- Never put personal details in tracked files or commit metadata: no real names, handles, assistant names, emails, account IDs, domains, machine or runner names, host accounts or paths, Actions run links, or copied chats, emails and logs. Follow `CONTRIBUTING.md` ("Personal details") and commit only with an identity in `.personal-details-allowlist`. Before the first commit in a clone or worktree, run `git config core.hooksPath .githooks`; run `python3 scripts/check_personal_details.py` before every push. If a personal detail was already pushed, stop and tell the user and follow `docs/personal-details-cleanup.md` together with them.
+- Never put personal details in tracked files or commit metadata: no real names, handles, assistant names, emails, account IDs, domains, machine or runner names, host accounts or paths, Actions run links, or copied chats, emails and logs. Follow `CONTRIBUTING.md` ("Personal details") and commit only with an anonymized email such as a GitHub noreply address. Before the first commit in a clone or worktree, run `git config core.hooksPath .githooks`; run `python3 scripts/check_personal_details.py` before every push. If a personal detail was already pushed, stop and tell the user and follow `docs/personal-details-cleanup.md` together with them.
 
 ### Architecture and boundaries
 - Record major subsystems, external integrations, ownership boundaries, and places where coupling is intentional.
