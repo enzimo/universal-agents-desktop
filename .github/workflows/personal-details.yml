@@ -1,8 +1,10 @@
 name: Personal details
 
-# Scans tracked files for real email addresses, phone numbers and home folder
-# paths. Runs on every change, including documentation-only edits, which the
-# CI workflow skips. See CONTRIBUTING.md ("Personal details").
+# Checks tracked files and the full commit history for personal details:
+# addresses, phone numbers, home folder paths and commit identities. Runs on
+# every change, including documentation-only edits. See CONTRIBUTING.md
+# ("Personal details"). Findings are printed without their values so the log
+# does not repeat them.
 
 on:
   push:
@@ -23,7 +25,7 @@ defaults:
 
 jobs:
   scan:
-    name: Scan tracked files
+    name: Scan files and history
     if: github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: [self-hosted, Linux, X64, ua-build, ua-linux]
     timeout-minutes: 10
@@ -32,6 +34,12 @@ jobs:
         run: node -e "if (process.env.UA_CI_HOOK_VERSION !== '1' || process.env.UA_CI_BUILD_CACHE_VERSION !== '1') throw new Error('Install the reviewed CI cleanup hooks before running jobs')"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Full history, and the pull request's own commits rather than
+          # GitHub's temporary merge commit.
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - name: Scan for personal details
-        run: python3 -m unittest discover -s tests -p 'test_no_personal_details.py' -v
+      - name: Test the checker
+        run: python3 -m unittest discover -s tests -p 'test_check_personal_details.py' -v
+      - name: Check tracked files and history
+        run: python3 scripts/check_personal_details.py --redact
