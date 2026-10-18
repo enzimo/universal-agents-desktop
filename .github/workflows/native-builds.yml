@@ -40,16 +40,20 @@ jobs:
             shell: rtk proxy powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$ErrorActionPreference = 'Stop'; $global:LASTEXITCODE = 0; & ([ScriptBlock]::Create([IO.File]::ReadAllText('{0}'))); exit $LASTEXITCODE"
             label: Windows x64
             artifact: windows-x64
+            timeout_minutes: 90
           - runner: [self-hosted, Linux, X64, ua-build, ua-linux]
             shell: rtk proxy bash --noprofile --norc -e -o pipefail {0}
             label: Linux x64
             artifact: linux-x64
+            timeout_minutes: 45
     if: github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ${{ matrix.runner }}
     defaults:
       run:
         shell: ${{ matrix.shell }}
-    timeout-minutes: 45
+    # Windows debug tests, Clippy and popup checks can consume 45 minutes on the
+    # shared host before the separate optimized application build even starts.
+    timeout-minutes: ${{ matrix.timeout_minutes }}
     steps:
       - name: Require managed local runner
         run: node -e "if (process.env.UA_CI_HOOK_VERSION !== '1' || process.env.UA_CI_BUILD_CACHE_VERSION !== '1') throw new Error('Install the reviewed CI cleanup hooks before running jobs')"

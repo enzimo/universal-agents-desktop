@@ -9,15 +9,11 @@ script compares the list on the base branch with the proposed list and:
 2. Requires the change to be append-only: existing entries stay unchanged and in
    place, and new entries are only added at the end.
 3. For each new entry, checks the image digest against the UA release's
-   container-image.txt, and checks that the UA files listed in
-   compatibility/contract-files.txt are byte-identical (same git blob SHA)
-   between the previous listed version with the same contract and the new one.
+   container-image.txt, then exercises the published image with runtime-lock.json.
+   Internal source changes do not require approval when those behaviors pass.
 
-Exit codes: 0 = every check passed; 1 = the change is rejected (invalid list,
-non-append edit, digest mismatch, missing release, API error); 2 = the list is
-valid but a person must review it (contract files changed, no earlier
-version with that contract exists to compare against, or the earlier version's
-UA tag no longer exists).
+Exit codes: 0 = every check passed; 1 = invalid list, release, image, or failed
+runtime test; 2 = the entry names a host contract this launcher cannot test.
 
 Every GitHub call goes through run_gh() so tests can replace it. gh reads its
 token from GH_TOKEN or its stored login; this script never prints a token.
@@ -34,9 +30,11 @@ import sys
 from typing import Callable
 import urllib.parse
 
+from runtime_contract import ContractError, SUPPORTED_CONTRACT, load_contract, verify_image
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 LIST_FILE = "compatible-runtimes.json"
-DEFAULT_CONTRACT_FILES = REPO_ROOT / "compatibility" / "contract-files.txt"
+DEFAULT_CONTRACT = REPO_ROOT / "runtime-lock.json"
 UA_REPOSITORY = "enzimo/universal-agents"
 IMAGE_REPOSITORY = "ghcr.io/enzimo/universal-agents"
 RELEASE_ASSET = "container-image.txt"
@@ -98,7 +96,7 @@ def _not_found(result: GhResult) -> bool:
 
 
 class UaSource:
-    """Read-only questions about UA releases and source files."""
+    """Read-only questions about published UA releases and tags."""
 
     def __init__(self, gh: GhRunner, repository: str = UA_REPOSITORY):
         self.gh = gh
@@ -136,22 +134,6 @@ class UaSource:
         if not self.tag_exists(tag):
             raise GhError(f"UA tag {tag} does not exist")
 
-    def file_sha(self, path: str, tag: str) -> str | None:
-        """Return the git blob SHA of a file at a tag, or None if it is missing."""
-        route = (f"repos/{self.repository}/contents/{urllib.parse.quote(path)}"
-                 f"?ref={urllib.parse.quote(tag)}")
-        result = self.gh(["api", route])
-        if _not_found(result):
-            return None
-        if result.returncode != 0:
-            raise GhError(f"cannot read {path} at UA tag {tag} ({_error_summary(result.stderr)})")
-        try:
-            data = json.loads(result.stdout)
-        except json.JSONDecodeError as error:
-            raise GhError(f"unexpected response for {path} at UA tag {tag}: {error}") from error
-        if not isinstance(data, dict) or data.get("type") != "file" or not data.get("sha"):
-            raise GhError(f"{path} at UA tag {tag} is not a regular file")
-        return data["sha"]
 
 
 @dataclass
@@ -187,8 +169,8 @@ VERDICTS = {
     EXIT_NEEDS_REVIEW: (
         "Result: the list is valid, but a person must decide. If the launcher still "
         "works with this UA version, review and merge the entry by hand. If UA changed "
-        "the host contract, the entry needs a new host_contract_version and a launcher "
-        "update; do not merge it under the old contract."),
+        "the host contract, update the launcher and its runtime test; do not approve "
+        "an entry under an unsupported contract."),
 }
 
 
@@ -292,23 +274,6 @@ def validate_entry(entry: object) -> list[str]:
     return problems
 
 
-def load_contract_files(path: Path) -> list[str]:
-    paths = []
-    for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        line = raw.strip()
-        if not line or line.startswith("#"):
-            continue
-        parts = line.split("/")
-        if line.startswith("/") or "\\" in line or any(part in ("", ".", "..") for part in parts):
-            raise ValueError(f"{path}:{number}: {line!r} must be a plain relative path")
-        if line in paths:
-            raise ValueError(f"{path}:{number}: {line} is listed twice")
-        paths.append(line)
-    if not paths:
-        raise ValueError(f"{path} lists no files, so contract changes could not be detected")
-    return paths
-
-
 def _describe(entry: dict) -> str:
     return (f"{entry['ua_version']} (contract {entry['host_contract_version']}, "
             f"{entry['image'].rsplit('@', 1)[1][:19]}...)")
@@ -334,13 +299,13 @@ def check_append_only(base: list[dict], head: list[dict], report: Report) -> lis
     return added
 
 
-def check_image(entry: dict, ua: UaSource, report: Report) -> None:
+def check_image(entry: dict, ua: UaSource, report: Report) -> bool:
     version, image = entry["ua_version"], entry["image"]
     try:
         published = ua.release_images(version)
     except GhError as error:
         report.add(FAIL, f"{version} image: {error}")
-        return
+        return False
     if len(published) != 1:
         report.add(FAIL, f"{version} image: UA release v{version}'s {RELEASE_ASSET} has "
                          f"{len(published)} '{IMMUTABLE_IMAGE_PREFIX}' lines; expected exactly one")
@@ -350,54 +315,31 @@ def check_image(entry: dict, ua: UaSource, report: Report) -> None:
     else:
         report.add(PASS, f"{version} image: matches the immutable image published with "
                          f"UA release v{version}.")
+        return True
+    return False
 
 
-def check_contract_files(entry: dict, base: list[dict], contract_files: list[str],
-                         ua: UaSource, report: Report) -> None:
-    version, contract = entry["ua_version"], entry["host_contract_version"]
-    previous = [old for old in base if old["host_contract_version"] == contract]
-    if not previous:
-        report.add(REVIEW, f"{version} contract files: no earlier listed version uses host "
-                           f"contract {contract}, so there is nothing to compare against. "
-                           "A person must confirm the launcher supports this release.")
+def check_runtime(entry: dict, contract: dict, report: Report,
+                  probe: Callable[[dict, str], None]) -> None:
+    version, wanted = entry["ua_version"], entry["host_contract_version"]
+    if wanted != contract["host_contract_version"] or wanted != SUPPORTED_CONTRACT:
+        report.add(REVIEW, f"{version} runtime: no reviewed test implements host contract "
+                           f"{wanted}. Update the launcher and its runtime test before approval.")
         return
-    old_version = previous[-1]["ua_version"]
-    old_tag, new_tag = f"v{old_version}", f"v{version}"
     try:
-        ua.require_tag(new_tag)
-        # The previous tag can be gone for good: UA's repository was recreated
-        # in October 2026 without its old tags, so v0.9.3 and earlier no longer
-        # exist. That leaves nothing to compare against, not a broken release.
-        if not ua.tag_exists(old_tag):
-            report.add(REVIEW, f"{version} contract files: UA tag {old_tag} of the previous "
-                               f"listed version {old_version} no longer exists, so there is "
-                               "nothing to compare against. A person must compare the "
-                               "contract files with a saved copy of that version and "
-                               "confirm the launcher supports this release.")
-            return
-        changed = []
-        for path in contract_files:
-            old_sha, new_sha = ua.file_sha(path, old_tag), ua.file_sha(path, new_tag)
-            if old_sha is None or new_sha is None:
-                missing = " and ".join(tag for tag, sha in ((old_tag, old_sha), (new_tag, new_sha))
-                                       if sha is None)
-                changed.append(f"{path} (missing at {missing})")
-            elif old_sha != new_sha:
-                changed.append(f"{path} (changed)")
-    except GhError as error:
-        report.add(FAIL, f"{version} contract files: {error}")
-        return
-    if changed:
-        report.add(REVIEW, f"{version} contract files: differ between UA {old_tag} and {new_tag}: "
-                           f"{'; '.join(changed)}. A person must review whether the launcher "
-                           f"still works with {version} under host contract {contract}.")
+        probe(contract, entry["image"])
+    except ContractError as error:
+        report.add(FAIL, f"{version} runtime: {error}")
     else:
-        report.add(PASS, f"{version} contract files: all {len(contract_files)} files are "
-                         f"identical between UA {old_tag} and {new_tag}.")
+        report.add(PASS, f"{version} runtime: published image passed host contract {wanted}: "
+                         "data/workspace paths, sign-in import, onboarding, configured startup, "
+                         "browser routes, restart and preservation.")
 
 
-def check_change(base_text: str | None, head_text: str, contract_files: list[str],
-                 gh: GhRunner = run_gh, repository: str = UA_REPOSITORY) -> Report:
+def check_change(base_text: str | None, head_text: str, contract: dict,
+                 gh: GhRunner = run_gh, repository: str = UA_REPOSITORY,
+                 probe: Callable[[dict, str], None] | None = None,
+                 verify_current: bool = False) -> Report:
     report = Report()
     head, problems = parse_list(head_text, "Proposed list")
     if problems:
@@ -406,7 +348,6 @@ def check_change(base_text: str | None, head_text: str, contract_files: list[str
         return report
     report.add(PASS, f"Proposed list: valid, {len(head['runtimes'])} entries in ascending "
                      "version order with pinned images.")
-
     if base_text is None:
         base_entries: list[dict] = []
         report.add(INFO, f"The base branch has no {LIST_FILE}; every entry is treated as new.")
@@ -417,20 +358,35 @@ def check_change(base_text: str | None, head_text: str, contract_files: list[str
                 report.add(FAIL, f"{problem}. Fix the list on the base branch by hand first.")
             return report
         base_entries = base["runtimes"]
-
     added = check_append_only(base_entries, head["runtimes"], report)
-    if added is None or not added:
+    if added is None:
         return report
-
+    candidates = list(added)
+    if verify_current:
+        current = [entry for entry in head["runtimes"]
+                   if entry["host_contract_version"] == contract["host_contract_version"]]
+        if not current:
+            report.add(FAIL, "No listed image exercises this launcher's runtime contract.")
+            return report
+        if current[-1] not in candidates:
+            candidates.append(current[-1])
+    if not candidates:
+        return report
     ua = UaSource(gh, repository)
     try:
         ua.check_access()
     except GhError as error:
         report.add(FAIL, f"UA access: {error}")
         return report
-    for entry in added:
-        check_image(entry, ua, report)
-        check_contract_files(entry, base_entries, contract_files, ua, report)
+    for entry in candidates:
+        try:
+            ua.require_tag(f"v{entry['ua_version']}")
+        except GhError as error:
+            report.add(FAIL, str(error))
+            continue
+        # Never execute an image whose identity failed release verification.
+        if check_image(entry, ua, report):
+            check_runtime(entry, contract, report, probe or verify_image)
     return report
 
 
@@ -458,13 +414,15 @@ def main(argv: list[str] | None = None, gh: GhRunner = run_gh) -> int:
                             "for example origin/main (a missing file counts as an empty list)")
     parser.add_argument("--head", type=Path, default=REPO_ROOT / LIST_FILE,
                         help="the proposed list (default: the repository's list file)")
-    parser.add_argument("--contract-files", type=Path, default=DEFAULT_CONTRACT_FILES,
-                        help="UA paths that define the host contract")
+    parser.add_argument("--contract", type=Path, default=DEFAULT_CONTRACT,
+                        help="the reviewed launcher runtime-lock.json")
+    parser.add_argument("--verify-current", action="store_true",
+                        help="also exercise the newest listed image, including checker-only changes")
     parser.add_argument("--ua-repository", default=UA_REPOSITORY)
     args = parser.parse_args(argv)
 
     try:
-        contract_files = load_contract_files(args.contract_files)
+        contract = load_contract(args.contract)
         head_text = args.head.read_text(encoding="utf-8")
         if args.base is not None:
             base_text = args.base.read_text(encoding="utf-8")
@@ -476,7 +434,8 @@ def main(argv: list[str] | None = None, gh: GhRunner = run_gh) -> int:
         print(VERDICTS[EXIT_REJECTED])
         return EXIT_REJECTED
 
-    report = check_change(base_text, head_text, contract_files, gh, args.ua_repository)
+    report = check_change(base_text, head_text, contract, gh, args.ua_repository,
+                          verify_current=args.verify_current)
     sys.stdout.write(report.render())
     return report.exit_code
 

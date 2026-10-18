@@ -54,5 +54,5 @@ The macOS GitHub Actions workflow performs the real Tauri compilation and produc
 - `ui/DESIGN.md`: desktop-only visual and interaction contract
 - `runtime-lock.json`: reviewed UA host contract and image repository
 - `compatible-runtimes.json`: UA versions and exact image digests known to work with each host contract
-- `compatible-runtimes.json`, `compatibility/`, `scripts/check_compatibility_list.py`: UA versions the launcher may offer, and the CI check that verifies and merges UA's release entries; see [`docs/COMPATIBILITY_LIST.md`](docs/COMPATIBILITY_LIST.md)
+- `scripts/check_compatibility_list.py`, `scripts/runtime_contract.py`: UA versions the launcher may offer, and the CI check that verifies and merges UA's release entries; see [`docs/COMPATIBILITY_LIST.md`](docs/COMPATIBILITY_LIST.md)
 - `docs/`: architecture, runtime integration, troubleshooting, and release operations

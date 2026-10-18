@@ -244,6 +244,12 @@ default Colima profile and Docker context remain separate.
 
 ## Bounded CI monitoring and release builds
 
+Native Windows jobs allow 90 minutes for debug tests, lint, popup checks and
+the separate optimized application build. Those checks consumed the previous
+45-minute budget before compilation of the optimized application could finish
+on the shared host. Linux jobs keep their 45-minute limit. These are job
+deadlines; every test and build remains required.
+
 Use `.github/scripts/watch_ci.py` to monitor a commit without an interactive
 assistant loop. It polls GitHub every 30 seconds, saves job logs once, writes
 `summary.json`, and exits on success, failure, or its default 45-minute deadline.
