@@ -79,19 +79,28 @@ checks must pass before the merge job runs.
    - A synthetic local configuration starts the configured runtime, chat and
      documentation routes, then restarts with the same data. Its configuration,
      imported credentials and shared workspace content survive.
-5. Negative tests deliberately change the workspace path and import command.
-   The published image must reject both for the expected reasons.
+5. Negative tests deliberately change the workspace path, import command and
+   startup command. The published image must reject each for the expected reason.
 
-The test containers have no network access. They receive disposable named
+One-shot test containers have no network access. The running service uses a
+private Docker network without external access, and publishes both locked
+ports only on host loopback. Health, browser routes and the broker connection
+are tested from the host, as desktop uses them. They receive disposable named
 volumes and synthetic credentials, never the runner's sign-in, Docker socket,
 real data or an external model key. Only the one-shot importer receives the
 read-only synthetic source. All containers and volumes are removed, including
 on failure; job ownership labels also let the managed runner recover after an
-interruption. A cleanup failure fails the check.
+interruption. After its unit tests, the compatibility job upgrades only its own
+registered cleanup hook to this checkout's reviewed copy, keeping a previous
+copy. That hook removes exact-job-label named volumes and networks as well as
+containers; other runner registrations and resources are untouched. A cleanup failure fails the check.
 
 This replaces the old git-blob comparison. Changes to build instructions,
 comments or internal implementations can pass as long as the actual launcher
-requirements still work. Tests cannot prove every UA workflow: model quality,
+requirements still work. Fixture preparation uses UA's layout and onboarding
+helpers, and the provider probe replaces its network transport. A rename of
+those test dependencies may require a reviewed fixture update even when the
+launcher still works; a failing probe is never silently skipped. Tests cannot prove every UA workflow: model quality,
 real subscription sign-in and graphical desktop behavior keep their separate
 runtime and desktop testing requirements.
 

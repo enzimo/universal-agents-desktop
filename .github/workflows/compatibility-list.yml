@@ -16,6 +16,7 @@ on:
       - tests/runtime_contract_negative_smoke.py
       - scripts/check_compatibility_list.py
       - tests/test_check_compatibility_list.py
+      - .github/runner/**
       - .github/workflows/compatibility-list.yml
   workflow_dispatch:
 
@@ -59,7 +60,11 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Test the list checker
-        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+        run: |
+          python3 -m unittest discover -s tests -p 'test_*.py' -v
+          python3 -m unittest discover -s .github/runner -v
+      - name: Install reviewed recovery for named test volumes and networks
+        run: python3 .github/runner/upgrade_cleanup.py
       - name: Require UA read token
         env:
           UA_READ_TOKEN: ${{ secrets.UA_READ_TOKEN }}
@@ -104,7 +109,7 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
-      - name: Prove broken layout and sign-in imports are rejected
+      - name: Prove broken layout, import and startup are rejected
         env:
           UA_COMPAT_PLATFORM: ${{ matrix.platform }}
         run: python3 tests/runtime_contract_negative_smoke.py

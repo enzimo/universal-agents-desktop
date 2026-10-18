@@ -19,6 +19,8 @@ def main():
         ("sign-in import", "codex_import_command",
          ["python", "-c", "raise RuntimeError('Intentional broken desktop import')"],
          "Intentional broken desktop import"),
+        ("startup command", "command", ["intentional-unsupported-desktop-command"],
+         "Runtime exited before"),
     ]
     for label, field, value, message in cases:
         broken = copy.deepcopy(contract)

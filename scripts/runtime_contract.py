@@ -15,9 +15,11 @@ import subprocess
 import tempfile
 import time
 import uuid
+from urllib.request import build_opener, HTTPRedirectHandler, ProxyHandler
 
 SUPPORTED_CONTRACT = 3
 MARKER = "desktop-contract-workspace-marker"
+BROKER_HEALTH_PATH = "/health"
 
 
 class ContractError(Exception):
@@ -76,38 +78,6 @@ assert result.ok, result.message
 assert len(calls) == 1, 'Provider did not resolve the imported sign-in'
 '''
 
-HEALTH_PROBE = r'''
-import json, sys, time
-from urllib.request import urlopen
-lock, expected = json.loads(sys.argv[1]), sys.argv[2]
-base = 'http://127.0.0.1:' + str(lock['container_ports']['web'])
-deadline = time.monotonic() + 180
-last = 'no response'
-while time.monotonic() < deadline:
-    try:
-        with urlopen(base + lock['health_path'], timeout=3) as response:
-            health = json.load(response)
-        assert health.get('status') == 'ok', health
-        if expected == 'onboarding':
-            assert health.get('service') == 'onboard-web', health
-            assert health.get('instance_root') == lock['data_mount'], health
-            paths = [lock['onboarding_ui_path']]
-        else:
-            assert health.get('service') != 'onboard-web', health
-            paths = [lock['web_ui_path'], lock['docs_path']]
-        for path in paths:
-            with urlopen(base + path, timeout=3) as response:
-                assert response.status == 200, path
-                assert 'text/html' in response.headers.get('Content-Type', ''), path
-        print('PASS: ' + expected + ' health and browser routes')
-        break
-    except Exception as error:
-        last = str(error)
-        time.sleep(1)
-else:
-    raise RuntimeError('Locked health/browser routes did not become ready: ' + last)
-'''
-
 CONFIGURE_PROBE = r'''
 import json, sys
 from pathlib import Path
@@ -144,6 +114,7 @@ class ImageProbe:
         self.identity = "ua-contract-" + uuid.uuid4().hex
         self.volumes: list[str] = []
         self.containers: list[str] = []
+        self.network: str | None = None
 
     def docker(self, *args: str, timeout: int = 60, checked: bool = True):
         try:
@@ -196,14 +167,68 @@ class ImageProbe:
             "SECURE_TOOL_BROKER_PUBLIC_PORT": str(self.contract["container_ports"]["broker"]),
         }
         env_args = [arg for key, value in environment.items() for arg in ("--env", f"{key}={value}")]
-        self.docker("run", "--detach", "--pull", "never", "--network", "none",
-                    "--name", name, *self.labels(), *self.mounts(), *env_args,
+        self.network = f"{self.identity}-network"
+        self.docker("network", "create", "--internal", *self.labels(), self.network)
+        ports = [arg for port in self.contract["container_ports"].values()
+                 for arg in ("--publish", f"127.0.0.1::{port}")]
+        self.docker("run", "--detach", "--pull", "never", "--network", self.network,
+                    "--name", name, *self.labels(), *self.mounts(), *ports, *env_args,
                     self.image, *self.contract["command"])
         return name
 
     def health(self, name: str, expected: str) -> None:
-        self.docker("exec", name, "python", "-c", HEALTH_PROBE,
-                    json.dumps(self.contract), expected, timeout=200)
+        # Test exactly the direction desktop uses: host loopback through Docker's
+        # published ports. Container-local probes miss loopback-only binds.
+        inspection = json.loads(self.docker("inspect", "--format", "{{json .}}", name).stdout)
+        if not inspection["State"]["Running"]:
+            raise ContractError("Runtime exited before startup completed")
+        ports = inspection["NetworkSettings"]["Ports"]
+        published = {}
+        for role, port in self.contract["container_ports"].items():
+            bindings = ports.get(f"{port}/tcp") or []
+            if len(bindings) != 1 or bindings[0]["HostIp"] != "127.0.0.1":
+                raise ContractError(f"The {role} port is not published only on host loopback")
+            published[role] = int(bindings[0]["HostPort"])
+        base = f"http://127.0.0.1:{published['web']}"
+
+        class NoRedirect(HTTPRedirectHandler):
+            def redirect_request(self, request, fp, code, message, headers, new_url):
+                return None
+
+        opener = build_opener(ProxyHandler({}), NoRedirect())
+        deadline = time.monotonic() + 180
+        last = "no response"
+        while time.monotonic() < deadline:
+            try:
+                with opener.open(base + self.contract["health_path"], timeout=3) as response:
+                    health = json.load(response)
+                if health.get("status") != "ok":
+                    raise ValueError("Health status is not ok")
+                if expected == "onboarding":
+                    if health.get("service") != "onboard-web" or health.get("instance_root") != self.contract["data_mount"]:
+                        raise ValueError("Fresh startup did not open onboarding at the locked data root")
+                    paths = [self.contract["onboarding_ui_path"]]
+                else:
+                    if health.get("service") == "onboard-web":
+                        raise ValueError("Configured startup still opens onboarding")
+                    paths = [self.contract["web_ui_path"], self.contract["docs_path"]]
+                    broker_url = f"http://127.0.0.1:{published['broker']}{BROKER_HEALTH_PATH}"
+                    # A Docker proxy can accept TCP before it connects to the
+                    # backend. Require a real broker response as well.
+                    with opener.open(broker_url, timeout=3) as response:
+                        if json.load(response).get("status") != "ok":
+                            raise ValueError("Broker health status is not ok")
+                for path in paths:
+                    with opener.open(base + path, timeout=3) as response:
+                        if response.status != 200 or "text/html" not in response.headers.get("Content-Type", ""):
+                            raise ValueError(f"Locked browser route did not serve HTML: {path}")
+                return
+            except (OSError, ValueError) as error:
+                last = str(error)
+                if self.docker("inspect", "--format", "{{.State.Running}}", name).stdout.strip() != "true":
+                    raise ContractError(f"Runtime exited before {expected} startup completed") from error
+                time.sleep(1)
+        raise ContractError(f"Locked web or broker ports did not become {expected}: {last}")
 
     def cleanup(self) -> None:
         errors = []
@@ -215,6 +240,10 @@ class ImageProbe:
             result = self.docker("volume", "rm", name, checked=False)
             if result.returncode:
                 errors.append(f"volume {name}: {result.stderr[-300:]}")
+        if self.network:
+            result = self.docker("network", "rm", self.network, checked=False)
+            if result.returncode and "not found" not in result.stderr:
+                errors.append(f"network {self.network}: {result.stderr[-300:]}")
         if errors:
             raise ContractError("Test resource cleanup failed: " + "; ".join(errors))
 
