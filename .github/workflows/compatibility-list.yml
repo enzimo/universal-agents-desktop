@@ -9,7 +9,11 @@ on:
   pull_request:
     paths:
       - compatible-runtimes.json
-      - compatibility/**
+      - runtime-lock.json
+      - scripts/runtime_contract.py
+      - tests/test_runtime_contract.py
+      - tests/runtime_import_smoke.py
+      - tests/runtime_contract_negative_smoke.py
       - scripts/check_compatibility_list.py
       - tests/test_check_compatibility_list.py
       - .github/workflows/compatibility-list.yml
@@ -28,10 +32,21 @@ defaults:
 
 jobs:
   check:
-    name: Verify compatibility list
+    name: Verify compatibility list (${{ matrix.platform }})
     if: github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
-    runs-on: [self-hosted, Linux, X64, ua-build, ua-linux]
-    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: [self-hosted, Linux, X64, ua-build, ua-linux]
+          - platform: linux/arm64
+            runner: [self-hosted, macOS, ARM64, ua-build, ua-macos]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
     steps:
       - name: Require managed local runner
         run: node -e "if (process.env.UA_CI_HOOK_VERSION !== '1' || process.env.UA_CI_BUILD_CACHE_VERSION !== '1') throw new Error('Install the reviewed CI cleanup hooks before running jobs')"
@@ -44,7 +59,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Test the list checker
-        run: python3 -m unittest discover -s tests -p 'test_check_compatibility_list.py' -v
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
       - name: Require UA read token
         env:
           UA_READ_TOKEN: ${{ secrets.UA_READ_TOKEN }}
@@ -55,13 +70,29 @@ jobs:
             echo "$message" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
+      - name: Keep registry access in the managed job's private Docker settings
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: |
+          if [[ -z "$UA_CI_CACHE" || "$DOCKER_CONFIG" != "$UA_CI_CACHE/docker" ||
+                ! -d "$DOCKER_CONFIG" || -L "$DOCKER_CONFIG" ]]; then
+            echo "::error::The managed runner's private Docker settings are required."
+            exit 1
+          fi
+          touch "$UA_CI_CACHE/docker-used"
+          chmod 700 "$DOCKER_CONFIG"
+          umask 077
+          set -o noclobber
+          printf '{"credHelpers": {"ghcr.io": ""}}\n' > "$DOCKER_CONFIG/config.json"
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
       - name: Verify the list against UA releases
         env:
           GH_TOKEN: ${{ secrets.UA_READ_TOKEN }}
           BASE_REF: ${{ github.event.pull_request.base.ref || 'main' }}
+          UA_COMPAT_PLATFORM: ${{ matrix.platform }}
         run: |
           set +e
-          python3 scripts/check_compatibility_list.py --base-ref "origin/$BASE_REF" > check-report.txt 2>&1
+          python3 scripts/check_compatibility_list.py --base-ref "origin/$BASE_REF" --verify-current > check-report.txt 2>&1
           status=$?
           set -e
           cat check-report.txt
@@ -73,6 +104,10 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
+      - name: Prove broken layout and sign-in imports are rejected
+        env:
+          UA_COMPAT_PLATFORM: ${{ matrix.platform }}
+        run: python3 tests/runtime_contract_negative_smoke.py
 
   merge:
     name: Merge verified UA release entry

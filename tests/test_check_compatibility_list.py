@@ -15,13 +15,14 @@ from unittest.mock import patch
 import urllib.parse
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "check_compatibility_list.py"
+sys.path.insert(0, str(SCRIPT.parent))
 spec = importlib.util.spec_from_file_location("check_compatibility_list", SCRIPT)
 check = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = check  # dataclasses look the module up by name
 spec.loader.exec_module(check)
 
 REPO = check.UA_REPOSITORY
-CONTRACT_FILES = ["runtime_settings/instance_layout.py", "docker/entrypoint.sh"]
+CONTRACT = json.loads((SCRIPT.parents[1] / "runtime-lock.json").read_text())
 
 
 def image(char: str) -> str:
@@ -42,16 +43,14 @@ class FakeGh:
     def __init__(self):
         self.accessible = True
         self.releases: dict[str, str] = {}  # tag -> container-image.txt
-        self.files: dict[tuple[str, str], str] = {}  # (tag, path) -> blob sha
+        self.tags = set()
         self.calls: list[list[str]] = []
 
-    def publish(self, version: str, published_image: str, shas: dict[str, str] | None = None):
+    def publish(self, version: str, published_image: str):
         tag = f"v{version}"
+        self.tags.add(tag)
         self.releases[tag] = (f"Release: {tag}\nImage: {check.IMAGE_REPOSITORY}:{version}\n"
                               f"Immutable image: {published_image}\n")
-        for path in CONTRACT_FILES:
-            self.files[(tag, path)] = (shas or {}).get(path, f"sha-of-{path}")
-
     def __call__(self, args: list[str]) -> check.GhResult:
         self.calls.append(args)
         not_found = check.GhResult(1, '{"message":"Not Found"}', "gh: Not Found (HTTP 404)")
@@ -65,18 +64,13 @@ class FakeGh:
             return check.GhResult(0, REPO + "\n", "")
         if route.startswith(f"repos/{REPO}/git/ref/tags/"):
             tag = urllib.parse.unquote(route.rsplit("/", 1)[1])
-            return check.GhResult(0, f"refs/tags/{tag}\n", "") if tag in self.releases else not_found
-        if route.startswith(f"repos/{REPO}/contents/"):
-            path, query = route[len(f"repos/{REPO}/contents/"):].split("?ref=")
-            sha = self.files.get((urllib.parse.unquote(query), urllib.parse.unquote(path)))
-            if sha is None:
-                return not_found
-            return check.GhResult(0, json.dumps({"type": "file", "sha": sha, "path": path}), "")
+            return check.GhResult(0, f"refs/tags/{tag}\n", "") if tag in self.tags else not_found
         raise AssertionError(f"unexpected gh call: {args}")
 
 
 class CheckTests(unittest.TestCase):
     def setUp(self):
+        self.probe = self.enterContext(patch.object(check, "verify_image"))
         self.gh = FakeGh()
         self.gh.publish("0.8.5", image("a"))
         self.gh.publish("0.9.0", image("b"))
@@ -84,7 +78,7 @@ class CheckTests(unittest.TestCase):
         self.head = text(entry("0.8.5", "a"), entry("0.9.0", "b"))
 
     def run_check(self, base, head):
-        report = check.check_change(base, head, CONTRACT_FILES, self.gh)
+        report = check.check_change(base, head, CONTRACT, self.gh)
         return report, report.render()
 
     def assert_outcome(self, report, rendered, code, *fragments):
@@ -95,7 +89,7 @@ class CheckTests(unittest.TestCase):
     def test_valid_append_passes(self):
         report, rendered = self.run_check(self.base, self.head)
         self.assert_outcome(report, rendered, check.EXIT_PASSED,
-                            "0.9.0 image: matches", "all 2 files are identical between UA v0.8.5 and v0.9.0")
+                            "0.9.0 image: matches", "published image passed host contract 3")
         self.assertNotIn(check.FAIL, [status for status, _ in report.lines])
 
     def test_unchanged_list_passes_without_contacting_github(self):
@@ -114,50 +108,49 @@ class CheckTests(unittest.TestCase):
         report, rendered = self.run_check(self.base, self.head)
         self.assert_outcome(report, rendered, check.EXIT_REJECTED, "release v0.9.0", "release not found")
 
-    def test_changed_contract_file_needs_review(self):
-        self.gh.publish("0.9.0", image("b"), {"docker/entrypoint.sh": "new-sha"})
+    def test_runtime_failure_rejects_the_entry(self):
+        self.probe.side_effect = check.ContractError("Configured startup failed")
         report, rendered = self.run_check(self.base, self.head)
-        self.assert_outcome(report, rendered, check.EXIT_NEEDS_REVIEW,
-                            "differ between UA v0.8.5 and v0.9.0: docker/entrypoint.sh (changed)",
-                            "a person must decide")
-        self.assertNotIn("instance_layout.py (changed)", rendered)
+        self.assert_outcome(report, rendered, check.EXIT_REJECTED, "Configured startup failed")
 
-    def test_contract_file_missing_at_new_tag_needs_review(self):
-        del self.gh.files[("v0.9.0", "runtime_settings/instance_layout.py")]
+    def test_digest_mismatch_never_executes_the_image(self):
+        self.gh.publish("0.9.0", image("c"))
         report, rendered = self.run_check(self.base, self.head)
-        self.assert_outcome(report, rendered, check.EXIT_NEEDS_REVIEW,
-                            "runtime_settings/instance_layout.py (missing at v0.9.0)")
+        self.assert_outcome(report, rendered, check.EXIT_REJECTED, "published")
+        self.probe.assert_not_called()
 
-    def test_contract_file_missing_at_both_tags_needs_review(self):
-        for tag in ("v0.8.5", "v0.9.0"):
-            del self.gh.files[(tag, "docker/entrypoint.sh")]
+    def test_runtime_check_does_not_read_or_compare_source_files(self):
         report, rendered = self.run_check(self.base, self.head)
-        self.assert_outcome(report, rendered, check.EXIT_NEEDS_REVIEW,
-                            "docker/entrypoint.sh (missing at v0.8.5 and v0.9.0)")
+        self.assert_outcome(report, rendered, check.EXIT_PASSED, "runtime: published image passed")
+        self.probe.assert_called_once_with(CONTRACT, image("b"))
+        self.assertFalse(any("/contents/" in str(args) for args in self.gh.calls))
 
-    def test_digest_mismatch_and_contract_change_reports_both_and_rejects(self):
-        self.gh.publish("0.9.0", image("c"), {"docker/entrypoint.sh": "new-sha"})
-        report, rendered = self.run_check(self.base, self.head)
-        self.assert_outcome(report, rendered, check.EXIT_REJECTED, "published", "(changed)")
+    def test_checker_only_change_rechecks_current_image(self):
+        report = check.check_change(self.head, self.head, CONTRACT, self.gh, verify_current=True)
+        self.assertEqual(report.exit_code, check.EXIT_PASSED, report.render())
+        self.probe.assert_called_once_with(CONTRACT, image("b"))
 
-    def test_compares_with_newest_listed_version_of_same_contract(self):
-        self.gh.publish("0.8.6", image("d"), {"docker/entrypoint.sh": "reviewed-sha"})
-        self.gh.publish("0.9.0", image("b"), {"docker/entrypoint.sh": "reviewed-sha"})
-        base = text(entry("0.8.5", "a"), entry("0.8.6", "d"))
-        head = text(entry("0.8.5", "a"), entry("0.8.6", "d"), entry("0.9.0", "b"))
-        report, rendered = self.run_check(base, head)
-        self.assert_outcome(report, rendered, check.EXIT_PASSED, "between UA v0.8.6 and v0.9.0")
+    def test_added_current_image_is_checked_only_once(self):
+        report = check.check_change(self.base, self.head, CONTRACT, self.gh, verify_current=True)
+        self.assertEqual(report.exit_code, check.EXIT_PASSED, report.render())
+        self.probe.assert_called_once_with(CONTRACT, image("b"))
+
+    def test_verify_current_requires_a_supported_listed_image(self):
+        other = text(entry("0.9.0", "b", contract=4))
+        report = check.check_change(other, other, CONTRACT, self.gh, verify_current=True)
+        self.assertEqual(report.exit_code, check.EXIT_REJECTED, report.render())
+        self.probe.assert_not_called()
 
     def test_first_entry_of_new_contract_needs_review(self):
         head = text(entry("0.8.5", "a"), entry("0.9.0", "b", contract=4))
         report, rendered = self.run_check(self.base, head)
         self.assert_outcome(report, rendered, check.EXIT_NEEDS_REVIEW,
-                            "no earlier listed version uses host contract 4")
+                            "no reviewed test implements host contract 4")
 
     def test_missing_base_list_treats_every_entry_as_new(self):
         report, rendered = self.run_check(None, self.head)
-        self.assert_outcome(report, rendered, check.EXIT_NEEDS_REVIEW,
-                            "has no compatible-runtimes.json", "0.8.5 contract files: no earlier")
+        self.assert_outcome(report, rendered, check.EXIT_PASSED,
+                            "has no compatible-runtimes.json", "0.8.5 runtime: published image passed")
 
     def test_modified_entry_fails(self):
         changed = text(entry("0.8.5", "a", contract=4), entry("0.9.0", "b"))
@@ -266,16 +259,11 @@ class CheckTests(unittest.TestCase):
                             "cannot read the UA repository", "UA_READ_TOKEN")
         self.assertNotIn("(missing at", rendered)
 
-    def test_missing_previous_tag_needs_review(self):
-        del self.gh.releases["v0.8.5"]
+    def test_missing_previous_tag_does_not_block_real_image_verification(self):
+        self.gh.tags.remove("v0.8.5")
         report, rendered = self.run_check(self.base, self.head)
-        self.assert_outcome(report, rendered, check.EXIT_NEEDS_REVIEW,
-                            "0.9.0 image: matches",
-                            "UA tag v0.8.5 of the previous listed version 0.8.5 no longer exists",
-                            "compare the contract files with a saved copy")
-        self.assertNotIn(check.FAIL, [status for status, _ in report.lines])
-        self.assertFalse(any(args[1].startswith(f"repos/{REPO}/contents/") for args in self.gh.calls
-                             if len(args) > 1))
+        self.assert_outcome(report, rendered, check.EXIT_PASSED, "0.9.0 image: matches")
+        self.probe.assert_called_once_with(CONTRACT, image("b"))
 
     def test_missing_new_tag_fails(self):
         real = self.gh.__call__
@@ -285,7 +273,7 @@ class CheckTests(unittest.TestCase):
                 return check.GhResult(1, '{"message":"Not Found"}', "gh: Not Found (HTTP 404)")
             return real(args)
 
-        report = check.check_change(self.base, self.head, CONTRACT_FILES, without_new_tag)
+        report = check.check_change(self.base, self.head, CONTRACT, without_new_tag)
         self.assertEqual(report.exit_code, check.EXIT_REJECTED)
         self.assertIn("UA tag v0.9.0 does not exist", report.render())
 
@@ -293,51 +281,18 @@ class CheckTests(unittest.TestCase):
         real = self.gh.__call__
 
         def flaky(args):
-            if args[1:2] == [f"repos/{REPO}/git/ref/tags/v0.8.5"]:
+            if args[1:2] == [f"repos/{REPO}/git/ref/tags/v0.9.0"]:
                 return check.GhResult(1, "", "gh: Server Error (HTTP 502)")
             return real(args)
 
-        report = check.check_change(self.base, self.head, CONTRACT_FILES, flaky)
+        report = check.check_change(self.base, self.head, CONTRACT, flaky)
         self.assertEqual(report.exit_code, check.EXIT_REJECTED)
-        self.assertIn("cannot look up UA tag v0.8.5", report.render())
-
-    def test_other_api_errors_fail_instead_of_counting_as_changed(self):
-        real = self.gh.__call__
-
-        def flaky(args):
-            if args[1].startswith(f"repos/{REPO}/contents/docker/"):
-                return check.GhResult(1, "", "gh: Server Error (HTTP 502)")
-            return real(args)
-
-        report = check.check_change(self.base, self.head, CONTRACT_FILES, flaky)
-        self.assertEqual(report.exit_code, check.EXIT_REJECTED)
-        self.assertIn("HTTP 502", report.render())
-
-
-class ContractFileListTests(unittest.TestCase):
-    def write(self, content):
-        directory = tempfile.TemporaryDirectory()
-        self.addCleanup(directory.cleanup)
-        path = Path(directory.name) / "contract-files.txt"
-        path.write_text(content, encoding="utf-8")
-        return path
-
-    def test_repository_list_is_valid(self):
-        paths = check.load_contract_files(check.DEFAULT_CONTRACT_FILES)
-        self.assertIn("docker/entrypoint.sh", paths)
-        self.assertEqual(len(paths), 6)
-
-    def test_comments_and_blank_lines_are_ignored(self):
-        self.assertEqual(check.load_contract_files(self.write("# note\n\n a/b.py \n")), ["a/b.py"])
-
-    def test_bad_lists_are_rejected(self):
-        for content in ("# nothing\n", "/abs.py\n", "a/../b.py\n", "a.py\na.py\n", "a\\b.py\n"):
-            with self.subTest(content=content):
-                with self.assertRaises(ValueError):
-                    check.load_contract_files(self.write(content))
-
+        self.assertIn("cannot look up UA tag v0.9.0", report.render())
 
 class CommandLineTests(unittest.TestCase):
+    def setUp(self):
+        self.probe = self.enterContext(patch.object(check, "verify_image"))
+
     def test_file_interface_and_exit_code(self):
         gh = FakeGh()
         gh.publish("0.8.5", image("a"))
@@ -378,11 +333,8 @@ class CommandLineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             head = self.git_repo(directory, text(entry("0.8.5", "a")))
             head.write_text(text(entry("0.8.5", "a"), entry("0.9.0", "b")), encoding="utf-8")
-            contract_list = Path(directory, "contract-files.txt")
-            contract_list.write_text("\n".join(CONTRACT_FILES) + "\n", encoding="utf-8")
             with patch("sys.stdout", new_callable=io.StringIO) as out:
-                code = check.main(["--base-ref", "main", "--head", str(head),
-                                   "--contract-files", str(contract_list)], gh=gh)
+                code = check.main(["--base-ref", "main", "--head", str(head)], gh=gh)
         self.assertEqual(code, check.EXIT_PASSED, out.getvalue())
         self.assertIn("1 new entry added", out.getvalue())
 
@@ -394,7 +346,7 @@ class CommandLineTests(unittest.TestCase):
             gh.publish("0.8.5", image("a"))
             with patch("sys.stdout", new_callable=io.StringIO) as out:
                 code = check.main(["--base-ref", "main", "--head", str(head)], gh=gh)
-        self.assertEqual(code, check.EXIT_NEEDS_REVIEW, out.getvalue())
+        self.assertEqual(code, check.EXIT_PASSED, out.getvalue())
         self.assertIn("has no compatible-runtimes.json", out.getvalue())
 
     def test_unknown_base_ref_is_an_error(self):
@@ -412,7 +364,7 @@ class CommandLineTests(unittest.TestCase):
         with patch.dict("os.environ", {"GH_TOKEN": "secret-token-value"}):
             rendered = check.check_change(text(entry("0.8.5", "a")),
                                           text(entry("0.8.5", "a"), entry("0.9.0", "b")),
-                                          CONTRACT_FILES, gh).render()
+                                          CONTRACT, gh).render()
         self.assertNotIn("secret-token-value", rendered)
 
 

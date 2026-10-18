@@ -73,10 +73,10 @@ Docker reports such a container as running and restarting, and keeps the last ex
 
 ## Runtime upgrade procedure
 
-A UA release that keeps the contract needs no desktop change: its release opens a pull request adding it to `compatible-runtimes.json`, and the compatibility workflow merges it after checking the digest and the contract files ([Compatibility list](COMPATIBILITY_LIST.md)). When that check stops for a person, or a UA release changes the contract:
+A UA release that keeps the contract needs no desktop change: its release opens a pull request adding it to `compatible-runtimes.json`, and the compatibility workflow merges it after checking the digest and testing the published image on both native architectures ([Compatibility list](COMPATIBILITY_LIST.md)). When that check stops for a person, or a UA release changes the contract:
 
-1. Diff the files in `compatibility/contract-files.txt` between the last listed version and the new one.
-2. If the change keeps the contract, merge the list entry by hand after review and run `tests/runtime_import_smoke.py <version>` against the image.
+1. Read the failing native runtime check's report and reproduce it with `tests/runtime_import_smoke.py <version>`.
+2. If the change keeps the contract, fix the runtime test or the runtime defect and let both native checks pass. Internal file changes alone require no approval.
 3. If it changes the contract, raise `SUPPORTED_HOST_CONTRACT_VERSION` and `runtime-lock.json` in a desktop release, add list entries with the new contract number, and decide how data from the previous contract is handled.
 4. Test a fresh install, an in-place update from the previous listed version, rollback after failed creation, and an existing data directory on macOS and Windows.
 

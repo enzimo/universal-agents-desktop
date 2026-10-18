@@ -55,40 +55,58 @@ request is an ordinary user's, so the check below runs.
 
 ## What the check verifies
 
-The **Compatibility list** workflow (`.github/workflows/compatibility-list.yml`)
-runs on pull requests that change the list, the contract file list, the
-checker, or the workflow itself. It runs on the managed self-hosted Linux runner
-and skips forks. It first runs the checker's unit tests. Then it runs
-`scripts/check_compatibility_list.py`, which compares the list on the pull
-request's exact head commit with the list on the base branch:
+The **Compatibility list** workflow checks new entries on native Linux AMD64
+and ARM64 Docker daemons. It also tests the newest listed image when the
+checker, workflow, smoke tests or `runtime-lock.json` changes. Both native
+checks must pass before the merge job runs.
 
-1. **The proposed list is valid**, following the rules above.
-2. **The change is append-only.** Every base entry is unchanged and in place.
-3. **Each new entry's image is the one UA published.** The checker downloads
-   `container-image.txt` from UA release `v{ua_version}`. That file's
-   `Immutable image:` line must equal the entry's `image` exactly.
-4. **The UA files the launcher depends on did not change.** The checker finds
-   the newest entry on the base branch with the same `host_contract_version`.
-   It then compares every path in `compatibility/contract-files.txt` at UA tag
-   `v{previous}` and tag `v{new}`, using git blob SHAs. A file missing on
-   either side counts as changed. If tag `v{previous}` no longer exists, a
-   person must compare the files instead.
+1. The proposed list has the schema and fixed layout described above.
+2. The change is append-only; earlier entries keep their identity and order.
+3. The UA release and tag exist. Each new entry's immutable image exactly
+   matches `container-image.txt` from that release. A mismatched image is never
+   executed.
+4. `scripts/runtime_contract.py` pulls that exact image and exercises the
+   current `runtime-lock.json` against it:
+   - UA's own instance layout resolves the locked configuration, credential
+     store and shared workspace paths.
+   - The locked sign-in import works before onboarding, leaves its read-only
+     source untouched, writes a private store, and preserves that store when
+     malformed or incomplete credentials are rejected. The real onboarding
+     provider test resolves the imported credentials with only its network
+     transport replaced.
+   - The image's ordinary `run` command starts browser onboarding on the
+     locked web port with the locked health and setup routes.
+   - A synthetic local configuration starts the configured runtime, chat and
+     documentation routes, then restarts with the same data. Its configuration,
+     imported credentials and shared workspace content survive.
+5. Negative tests deliberately change the workspace path and import command.
+   The published image must reject both for the expected reasons.
 
-Before it reads any UA data, the checker confirms the token can read the UA
-repository. GitHub answers "not found" both for a missing file and for a private
-repository the token cannot see. The early check keeps a token problem from
-being reported as a changed contract file.
+The test containers have no network access. They receive disposable named
+volumes and synthetic credentials, never the runner's sign-in, Docker socket,
+real data or an external model key. Only the one-shot importer receives the
+read-only synthetic source. All containers and volumes are removed, including
+on failure; job ownership labels also let the managed runner recover after an
+interruption. A cleanup failure fails the check.
 
-The checker prints one line per check and exits with:
+This replaces the old git-blob comparison. Changes to build instructions,
+comments or internal implementations can pass as long as the actual launcher
+requirements still work. Tests cannot prove every UA workflow: model quality,
+real subscription sign-in and graphical desktop behavior keep their separate
+runtime and desktop testing requirements.
+
+Before reading releases, the checker verifies access to the UA repository.
+Missing credentials, failed pulls, timeouts and failed runtime behavior are
+errors that keep the entry open. There is no source-hash shortcut or successful
+result when Docker is unavailable.
 
 | Exit code | Meaning |
 | --- | --- |
-| 0 | Every check passed. |
-| 1 | Rejected: invalid list, a non-append edit, an image mismatch, a missing release or new-version tag, or a GitHub error. Fix the change; do not merge it. |
-| 2 | The list is valid, but a person must decide (see below). |
+| 0 | List, release identity and runtime checks passed. |
+| 1 | Invalid list, release or image, a GitHub/Docker error, or a failed runtime check. Fix it before merging. |
+| 2 | The entry uses a host contract this launcher cannot test. Update the launcher and its reviewed test first. |
 
-Both non-zero results fail the workflow's check job. The report appears in the
-workflow run's summary.
+Reports appear in each native check's workflow summary.
 
 ## When it merges automatically
 
@@ -113,70 +131,55 @@ Squash merging must stay enabled in the repository settings.
 
 ## When a person must decide
 
-- **Contract files changed.** The report names each file that changed between
-  the two UA tags. Read UA's diff for those files.
-  - If the launcher still works with the new release, test it as described in
-    [Runtime integration](RUNTIME_INTEGRATION.md) and
-    [`tests/runtime_import_smoke.py`](../tests/runtime_import_smoke.py). Then
-    merge the pull request by hand. Later releases are compared against this
-    newly listed version.
-  - If UA changed the contract, do not merge the entry under the old contract
-    number. The launcher needs an update that supports the new behavior and a
-    new `host_contract_version`. Close the automated pull request, and add the
-    entry with the new contract number in the launcher update's pull request.
-- **No earlier entry uses that contract.** The first release under a new
-  contract cannot be compared with anything. A person adds it, normally in the
-  same change that teaches the launcher the new contract.
-- **The previous version's UA tag no longer exists.** UA's repository was
-  recreated in October 2026 without its old tags, so UA 0.9.3 and earlier have
-  no tag to compare against. For the first release listed after that (UA
-  0.9.4), compare the files in `compatibility/contract-files.txt` by hand with
-  a saved copy of UA 0.9.3, then merge by hand. Later releases are compared
-  against the newly listed version again. The image package was recreated at
-  the same time, so the images for UA 0.8.5 and 0.9.0 to 0.9.3 no longer
-  exist. Those entries were removed under the exception above, and UA 0.9.4 is
-  now the oldest listed version.
-- **The pull request is not from UA's release automation.** For example, a
-  person edited the list or the contract file list. The check still runs and
-  reports, but only a person merges.
+- A new host contract needs a reviewed launcher change and a corresponding
+  runtime test. The checker never assigns an unsupported contract automatically.
+- A runtime test fails. Diagnose its report before approving the release;
+  changing an internal source file alone is no longer a reason to stop.
+- A pull request changes anything besides the compatibility list, or does not
+  come from a `ua-release/` branch. It needs normal review even if tests pass.
 
-If the launcher starts depending on another UA file, add it to
-`compatibility/contract-files.txt` in a reviewed pull request.
+A previous UA tag is not required. Each proposed image proves its own behavior,
+so deleting historical tags cannot prevent a compatible new release from being
+approved.
 
-## Secrets
+## GitHub access
 
-| Secret | Repository | Purpose and permissions |
-| --- | --- | --- |
-| `UA_READ_TOKEN` | this repository | Lets the check read UA. Use a fine-grained personal access token whose resource owner is `enzimo`, limited to `enzimo/universal-agents`, with repository permission **Contents: Read-only**. GitHub adds **Metadata: Read-only** automatically. Contents covers file contents, tags, releases and release asset downloads, so no other permission is needed. |
-| `DESKTOP_COMPATIBILITY_TOKEN` | `enzimo/universal-agents` | Lets UA's release workflow push a `ua-release/` branch here and open the pull request. It needs **Contents: Read and write** and **Pull requests: Read and write** on `enzimo/universal-agents-desktop`. It is maintained with UA's release workflow. |
+`UA_READ_TOKEN` remains a fine-grained Actions secret with read-only Contents
+access to the private UA repository. The checker uses it only for release and
+tag reads. UA's `DESKTOP_COMPATIBILITY_TOKEN` remains the token that opens
+release entries in this repository.
 
-Both are GitHub Actions secrets: encrypted values stored in each repository's
-**Settings → Secrets and variables → Actions**, never files in a repository.
-Workflows can read them; nobody can view them after saving. They are needed
-because a workflow's built-in token can only reach its own repository. Both
-are optional. Without them, a maintainer adds each UA release by hand: run
-UA's `scripts/propose_desktop_compatibility.py`, then the local check below.
+Image pulls use this repository's short-lived `GITHUB_TOKEN`, with
+`packages: read`. In the UA container package's settings, **Manage Actions
+access** must grant this desktop repository **Read** access. That package
+setting is necessary for cross-repository pulls; read-only Contents access on
+a fine-grained token does not grant registry access. See
+[GitHub's package permissions](https://docs.github.com/en/packages/learn-github-packages/about-permissions-for-github-packages).
 
-If `UA_READ_TOKEN` is missing, the check job fails with a message naming it.
-Fine-grained tokens expire. When one does, the check fails at the UA access step
-until the token is replaced.
+The managed runner gives each job a private `DOCKER_CONFIG`. The workflow
+stores the registry login there without a host credential helper, and the
+runner deletes it at job completion. No new long-lived registry secret is
+needed. A refused package pull fails the check with the registry error.
 
 ## Running the check locally
 
-The checker uses only Python's standard library and calls GitHub through
-`rtk proxy gh`, so it uses your GitHub CLI login. It only reads from GitHub.
+Python's standard library, RTK, GitHub CLI, Docker and access to the private
+image are required. Sign Docker in using your own approved registry access.
 
 ```sh
-# Compare the working copy with main, as CI does:
+# Check a proposed append against main:
 rtk proxy python3 scripts/check_compatibility_list.py --base-ref origin/main
 
-# Or compare two files:
-rtk proxy python3 scripts/check_compatibility_list.py --base /tmp/base.json --head /tmp/head.json
+# Exercise the newest listed image too, as CI does for checker-only changes:
+rtk proxy python3 scripts/check_compatibility_list.py --base-ref origin/main --verify-current
 
-# Unit tests (fake GitHub layer, no network):
-rtk proxy python3 -m unittest discover -s tests -p 'test_check_compatibility_list.py' -v
+# Run the same runtime checks directly for a listed version:
+rtk proxy python3 tests/runtime_import_smoke.py 0.9.5
+
+# Script unit tests without Docker or network access:
+rtk proxy python3 -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
-`--contract-files` and `--ua-repository` override the defaults for testing. If
-the base ref has no list yet, every entry counts as new and needs a person's
-review. This applies to the change that first adds the list to `main`.
+`--contract` selects another reviewed runtime lock for testing;
+`--ua-repository` selects the release source. The old `--contract-files` option
+and `compatibility/contract-files.txt` have been removed.
