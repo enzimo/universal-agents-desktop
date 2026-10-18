@@ -117,9 +117,10 @@ jobs:
   merge:
     name: Merge verified UA release entry
     needs: check
-    # always() lets this job explain in the run summary why a pull request was
-    # left for a person, even when the check failed.
-    if: always() && github.event_name == 'pull_request' && github.event.repository.private && github.event.pull_request.head.repo.full_name == github.repository
+    # An unconditional summary job survives cancellation and can hold the
+    # concurrency slot while a newer commit's checks wait. Failed checks already
+    # report their reasons; schedule a merge only for a verified release entry.
+    if: needs.check.result == 'success' && github.event_name == 'pull_request' && github.event.repository.private && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'ua-release/')
     runs-on: [self-hosted, Linux, X64, ua-build, ua-linux]
     timeout-minutes: 10
     permissions:
@@ -131,7 +132,6 @@ jobs:
       - name: Merge only a verified, list-only UA release pull request
         env:
           GH_TOKEN: ${{ github.token }}
-          CHECK_RESULT: ${{ needs.check.result }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -139,9 +139,6 @@ jobs:
         run: |
           list_file=compatible-runtimes.json
           reasons=()
-          if [[ "$CHECK_RESULT" != success ]]; then
-            reasons+=("The list check did not pass (result: $CHECK_RESULT). Its report is in the check job's summary above.")
-          fi
           if [[ "$HEAD_REF" != ua-release/* ]]; then
             reasons+=("The branch \`$HEAD_REF\` is not a \`ua-release/\` branch. Only UA's release automation is merged automatically.")
           fi

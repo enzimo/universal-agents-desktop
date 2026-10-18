@@ -134,8 +134,13 @@ only when all of these are true:
 - the pull request's head is still the commit that was checked. The merge uses
   `--match-head-commit`, so a later push cannot be merged unchecked.
 
-Otherwise the merge job leaves the pull request open and writes the reasons in
-the run summary. GitHub's built-in auto-merge is not used because it needs branch
+Failed or cancelled checks and branches outside `ua-release/` skip the merge
+job and leave the pull request open. Check failures explain their reasons in
+the native job summaries. The merge job reports any remaining refusal, such as
+additional changed files or a moved head. It does not use an unconditional job
+that could hold the workflow's concurrency slot after cancellation.
+
+GitHub's built-in auto-merge is not used because it needs branch
 protection, which this private repository's plan does not offer. The merge
 uses the workflow's own token, so the merge commit does not start other
 workflows. The CI and native-build workflows ignore list-only changes anyway.
