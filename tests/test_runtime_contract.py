@@ -40,12 +40,15 @@ class RuntimeContractTests(unittest.TestCase):
 
     def test_failed_probe_cleans_up_every_owned_resource(self):
         self.probe.containers = ["owned-helper", "owned-runtime"]
-        self.probe.volumes = ["owned-data", "owned-workspace"]
+        self.probe.volumes = ["owned-data", "owned-workspace", "owned-codex-source"]
+        self.probe.network = "owned-network"
         with patch.object(self.probe, "docker", return_value=subprocess.CompletedProcess([], 0, "", "")) as docker:
             self.probe.cleanup()
         self.assertEqual([call.args for call in docker.call_args_list], [
             ("rm", "--force", "owned-runtime"), ("rm", "--force", "owned-helper"),
-            ("volume", "rm", "owned-workspace"), ("volume", "rm", "owned-data")])
+            ("volume", "rm", "owned-codex-source"),
+            ("volume", "rm", "owned-workspace"), ("volume", "rm", "owned-data"),
+            ("network", "rm", "owned-network")])
 
     def test_cleanup_failure_prevents_approval(self):
         self.probe.volumes = ["owned-data", "owned-workspace"]

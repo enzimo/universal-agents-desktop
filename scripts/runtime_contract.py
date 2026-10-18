@@ -1,18 +1,19 @@
 """Exercise the desktop's reviewed contract against an immutable UA image.
 
-Only synthetic credentials and disposable Docker volumes are used. The image
-has no network access, host credentials, Docker socket, or user data. These are
-behavior checks, so internal UA refactors do not require another approval.
+Only synthetic credentials and disposable Docker volumes are used. One-shot
+helpers are offline; the running service uses a temporary Docker bridge and
+host loopback publications, just as desktop does. No host credentials, Docker
+socket, or user data enter the image.
 """
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 from pathlib import Path
 import signal
 import subprocess
-import tempfile
 import time
 import uuid
 from urllib.request import build_opener, HTTPRedirectHandler, ProxyHandler
@@ -116,10 +117,12 @@ class ImageProbe:
         self.containers: list[str] = []
         self.network: str | None = None
 
-    def docker(self, *args: str, timeout: int = 60, checked: bool = True):
+    def docker(self, *args: str, timeout: int = 60, checked: bool = True,
+               input: str | None = None):
         try:
             result = subprocess.run(["rtk", "proxy", "docker", *args],
-                                    capture_output=True, text=True, timeout=timeout, check=False)
+                                    capture_output=True, text=True, timeout=timeout, check=False,
+                                    input=input)
         except (OSError, subprocess.TimeoutExpired) as error:
             raise ContractError(f"Docker {args[0]} could not finish: {error}") from error
         if checked and result.returncode:
@@ -143,14 +146,16 @@ class ImageProbe:
                 "--volume", f"{self.volumes[1]}:{self.contract['workspace_mount']}"]
 
     def helper(self, command: list[str], *, extra: list[str] | None = None,
-               checked: bool = True):
+               checked: bool = True, input: str | None = None):
         name = f"{self.identity}-{uuid.uuid4().hex[:8]}"
         self.containers.append(name)
         result = self.docker(
             "run", "--rm", "--pull", "never", "--network", "none", "--name", name,
+            *(["--interactive"] if input is not None else []),
             *self.labels(), *self.mounts(), "--env", "HOME=/tmp/ua-contract-home",
             "--env", f"CODEX_HOME={self.contract['codex_home']}", *(extra or []),
-            "--entrypoint", command[0], self.image, *command[1:], checked=checked, timeout=120)
+            "--entrypoint", command[0], self.image, *command[1:], checked=checked, timeout=120,
+            input=input)
         return result
 
     def python(self, program: str, *args: str) -> str:
@@ -168,7 +173,9 @@ class ImageProbe:
         }
         env_args = [arg for key, value in environment.items() for arg in ("--env", f"{key}={value}")]
         self.network = f"{self.identity}-network"
-        self.docker("network", "create", "--internal", *self.labels(), self.network)
+        # Internal networks disable published ports. Use an ordinary, owned
+        # bridge to exercise desktop's real host-to-container connection.
+        self.docker("network", "create", *self.labels(), self.network)
         ports = [arg for port in self.contract["container_ports"].values()
                  for arg in ("--publish", f"127.0.0.1::{port}")]
         self.docker("run", "--detach", "--pull", "never", "--network", self.network,
@@ -276,29 +283,51 @@ class ImageProbe:
             self.cleanup()
 
     def check_import(self) -> None:
-        with tempfile.TemporaryDirectory(prefix=".ua-contract-", dir=Path.home()) as temporary:
-            source = Path(temporary) / "auth.json"
-            payload = base64.urlsafe_b64encode(json.dumps({"exp": int(time.time()) + 3600}).encode()).decode().rstrip("=")
-            token = f"synthetic.{payload}.signature"
-            source.write_text(json.dumps({"tokens": {"access_token": token, "refresh_token": "synthetic-refresh"}}))
-            original = source.read_bytes()
-            command = [*self.contract["codex_import_command"],
-                       self.contract["codex_home"], self.contract["codex_auth_store"]]
-            mounts = ["--volume", f"{source}:{self.contract['codex_auth_mount']}:ro"]
-            self.helper(command, extra=mounts)
-            if source.read_bytes() != original:
-                raise ContractError("Import changed the read-only source credential file")
-            self.store_digest = self.python(STORE_PROBE)
-            self.python(PROVIDER_PROBE)
-            for invalid in ("invalid-synthetic-auth", json.dumps({"tokens": {"access_token": token}})):
-                source.write_text(invalid)
-                result = self.helper(command, extra=mounts, checked=False)
-                if result.returncode == 0:
-                    raise ContractError("Import accepted an invalid credential file")
-                if token in result.stdout + result.stderr or invalid in result.stdout + result.stderr:
-                    raise ContractError("Import printed synthetic credential contents")
-                if self.python(STORE_PROBE) != self.store_digest:
-                    raise ContractError("Failed import changed the existing sign-in store")
+        # A remote or Colima daemon need not share the runner's home directory.
+        # Seed synthetic bytes through stdin into an owned volume instead of a
+        # host bind, then give only the importer a read-only view of that volume.
+        source_volume = self.volume("codex-source")
+        source_mount = f"{source_volume}:{self.contract['codex_home']}"
+        writer = ["python", "-c",
+                  "import sys; from pathlib import Path; p=Path(sys.argv[1]); "
+                  "p.parent.mkdir(parents=True, exist_ok=True); "
+                  "p.write_text(sys.stdin.read()); p.chmod(0o600)",
+                  self.contract["codex_auth_mount"]]
+        reader = ["python", "-c",
+                  "import hashlib,sys; from pathlib import Path; "
+                  "print(hashlib.sha256(Path(sys.argv[1]).read_bytes()).hexdigest())",
+                  self.contract["codex_auth_mount"]]
+
+        def write_source(contents: str) -> None:
+            self.helper(writer, extra=["--volume", source_mount], input=contents)
+
+        def source_digest() -> str:
+            return self.helper(reader, extra=["--volume", source_mount + ":ro"]).stdout.strip()
+
+        payload = base64.urlsafe_b64encode(json.dumps({"exp": int(time.time()) + 3600}).encode()).decode().rstrip("=")
+        token = f"synthetic.{payload}.signature"
+        original = json.dumps({"tokens": {"access_token": token, "refresh_token": "synthetic-refresh"}})
+        write_source(original)
+        expected_digest = hashlib.sha256(original.encode()).hexdigest()
+        if source_digest() != expected_digest:
+            raise ContractError("Synthetic source credential file was not created correctly")
+        command = [*self.contract["codex_import_command"],
+                   self.contract["codex_home"], self.contract["codex_auth_store"]]
+        mounts = ["--volume", source_mount + ":ro"]
+        self.helper(command, extra=mounts)
+        if source_digest() != expected_digest:
+            raise ContractError("Import changed the read-only source credential file")
+        self.store_digest = self.python(STORE_PROBE)
+        self.python(PROVIDER_PROBE)
+        for invalid in ("invalid-synthetic-auth", json.dumps({"tokens": {"access_token": token}})):
+            write_source(invalid)
+            result = self.helper(command, extra=mounts, checked=False)
+            if result.returncode == 0:
+                raise ContractError("Import accepted an invalid credential file")
+            if token in result.stdout + result.stderr or invalid in result.stdout + result.stderr:
+                raise ContractError("Import printed synthetic credential contents")
+            if self.python(STORE_PROBE) != self.store_digest:
+                raise ContractError("Failed import changed the existing sign-in store")
 
 
 def verify_image(contract: dict, image: str) -> None:

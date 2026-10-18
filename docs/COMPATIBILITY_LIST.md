@@ -83,14 +83,17 @@ checks must pass before the merge job runs.
    startup command. The published image must reject each for the expected reason.
 
 One-shot test containers have no network access. The running service uses a
-private Docker network without external access, and publishes both locked
+disposable standard Docker bridge and publishes both locked
 ports only on host loopback. Health, browser routes and the broker connection
 are tested from the host, as desktop uses them. They receive disposable named
 volumes and synthetic credentials, never the runner's sign-in, Docker socket,
-real data or an external model key. Only the one-shot importer receives the
-read-only synthetic source. All containers and volumes are removed, including
-on failure; job ownership labels also let the managed runner recover after an
-interruption. After its unit tests, the compatibility job upgrades only its own
+real data or an external model key. The synthetic source is written over stdin
+into its own Docker volume, so a remote daemon or restricted Colima profile
+needs no host folder share. Only import helpers receive a read-only view of
+that source. Desktop's exact host-file bind arguments and file-sharing behavior
+keep their core and platform integration checks. All containers and volumes are
+removed, including on failure; job ownership labels also let the managed runner
+recover after an interruption. After its unit tests, the compatibility job upgrades only its own
 registered cleanup hook to this checkout's reviewed copy, keeping a previous
 copy. That hook removes exact-job-label named volumes and networks as well as
 containers; other runner registrations and resources are untouched. A cleanup failure fails the check.
