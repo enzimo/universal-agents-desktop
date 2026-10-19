@@ -10,6 +10,11 @@
       "ua_version": "0.9.5",
       "host_contract_version": 3,
       "image": "ghcr.io/enzimo/universal-agents@sha256:56c6fb35e748d0109d6c7da4bab51f1ef127dbdf565d8c034c8d907132eaa269"
+    },
+    {
+      "ua_version": "0.9.6",
+      "host_contract_version": 3,
+      "image": "ghcr.io/enzimo/universal-agents@sha256:96e39cc6e0c5df328f97ac65c609cae1c22892d1b9aafe0c3dfc0daf058207b5"
     }
   ]
 }
