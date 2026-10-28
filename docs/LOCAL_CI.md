@@ -24,8 +24,9 @@ registration instead of installing global emulation handlers each time.
 The public documentation site is the exception to these local-runner requirements.
 See [Documentation publishing](#documentation-publishing) below.
 
-Use an organization runner group open to all of the organization's private
-repositories and closed to public ones. Fork pull requests are excluded. Assign the custom labels only after installing
+Use an organization runner group restricted to approved repositories, with public
+access enabled only after installing the reviewed host policy. Fork PRs cannot
+use local hosts. Assign the custom labels only after installing
 the cleanup hooks. Each runner process needs its own application, work, hook,
 and state directories. Do not share a work directory or tool cache between
 runner processes. Keep the native Windows runner in the signed-in account so
@@ -102,6 +103,31 @@ to Windows also requires discard/trim and sparse VHD support. Enable the distro'
 check Windows free space as well as `df`. Do not shut down all WSL distributions
 or compact Docker Desktop's VHD during CI. See [Microsoft's WSL disk guidance](https://learn.microsoft.com/en-us/windows/wsl/disk-space).
 
+## Local CI for public repositories
+
+The runner group selects approved repositories, retaining any already approved
+private repositories. Each installed hook separately lists approved public
+repositories in `public_repositories` in its `config.json`, outside the checkout.
+Only add Universal Agents and Desktop to that public list for this rollout.
+
+The hook accepts pushes, schedules, manual runs, and pull requests whose head
+and base both belong to the configured repository. Fork PRs, missing or mismatched
+repository identity, `pull_request_target`, `workflow_run`, and other events are
+refused before job state or commands are created. Same-repository branches are
+trusted team code: only people and automation trusted with the machines may push
+them. Public documentation validation stays on disposable hosted runners.
+
+Every local job requires `UA_CI_PUBLIC_JOB_POLICY_VERSION=1` beside the existing
+hook/cache markers. Install the reviewed hook and public allowlist before enabling
+group access. Preserve host paths, disk reserves, caches and private-repository
+entries. Jobs no longer replace installed hooks with a checkout's copy.
+
+The standard-library runner tests exercise accepted public work and rejected
+fork/unsupported events. Documentation tests live under `tests/docs/` in their
+own locked environment, so native compatibility checks do not need MkDocs. After
+installation, dispatch **Local runner preflight**, inspect cleanup, and confirm
+all four runners are online. This validation publishes no releases or images.
+
 ## Documentation publishing
 
 The site is published at [Universal Agents Desktop documentation](https://enzimo.github.io/universal-agents-desktop/),
@@ -110,7 +136,7 @@ with the quickstart under `/universal-agents-desktop/quickstart/`.
 It publishes automatically after a push to `main` or a stable `vX.Y.Z` tag, or a
 manual run on either ref. Pull requests validate without uploading or deploying.
 Feature branches and pre-release tags cannot deploy. Native build workflows and
-their private-repository guards remain separate.
+their installed public-job policy remain separate.
 
 In **Settings > Pages > Build and deployment**, select **GitHub Actions** as the
 source. The `github-pages` environment permits branch `main` and tag pattern
@@ -137,7 +163,7 @@ Use an isolated environment for documentation tools:
 ```sh
 rtk proxy python3 -m venv .venv
 PATH="$PWD/.venv/bin:$PATH" rtk proxy python -m pip install --require-hashes -r requirements-docs.lock.txt
-PATH="$PWD/.venv/bin:$PATH" rtk proxy python -m unittest discover -s tests -p test_docs.py -v
+PATH="$PWD/.venv/bin:$PATH" rtk proxy python -m unittest discover -s tests/docs -v
 PATH="$PWD/.venv/bin:$PATH" rtk proxy python -m mkdocs build --strict
 PATH="$PWD/.venv/bin:$PATH" rtk proxy python -m mkdocs serve
 ```
@@ -170,7 +196,9 @@ rtk proxy python3 .github/runner/install_hooks.py \
   --runner /opt/actions-runner \
   --destination /opt/ua-ci-hooks \
   --repository enzimo/universal-agents-desktop \
-  --repository enzimo/universal-agents
+  --repository enzimo/universal-agents \
+  --public-repository enzimo/universal-agents-desktop \
+  --public-repository enzimo/universal-agents
 ```
 
 On Windows use `python3` from the signed-in account and Windows paths. The
@@ -271,9 +299,10 @@ keep the Windows disk reserve check enabled between maintenance windows.
 
 ## Activated runners
 
-The organization runner group `Universal Agents` is open to every private
-repository in the organization and closed to public repositories, so a
-stranger's pull request to a public repository can never run on these hosts. Three runners, one each for Windows, macOS and Linux (WSL), use
+The organization runner group `Universal Agents` selects approved repositories,
+and installed hooks refuse fork PRs even if a workflow requests a local runner.
+Four runners, one each for Windows and macOS plus two Linux runners in the
+dedicated WSL distribution, use
 the reviewed labels and installed cleanup hooks. A maintainer administers them
 through a delegated runner role while their base organization membership
 remains `member`. Keep each host's runner names, accounts and folders in that
