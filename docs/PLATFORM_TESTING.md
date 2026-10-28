@@ -1,10 +1,10 @@
 # Desktop platform testing
 
-For end-user installation, use [Quickstart](../QUICKSTART.md) or the [offline setup guide](setup.html).
+For end-user installation, use [Quickstart](../QUICKSTART.md) or the [offline setup guide](https://github.com/enzimo/universal-agents/releases/latest/download/setup-guide.html).
 
 For Windows, Linux and macOS build-machine provisioning, open the [interactive setup guide](remote-build-setup.html). It covers SSH, native toolchains, Docker build/run checks, self-hosted runners, desktop sessions and the connection handoff.
 
-The active **Local runner preflight** workflow checks the managed local runners. All active workflows now require local labels and installed cleanup hooks. See [Local CI](LOCAL_CI.md) for toolchains, WSL, runner registration, and resource reclamation. GitHub organization permissions are needed to activate the complete fleet.
+The active **Local runner preflight** workflow checks the managed local runners. Native build and runtime-check workflows require local labels and installed cleanup hooks; documentation uses disposable GitHub-hosted runners. See [Local CI](LOCAL_CI.md) for toolchains, WSL, runner registration, and resource reclamation. GitHub organization permissions are needed to activate the complete fleet.
 
 ## Supported starting points
 

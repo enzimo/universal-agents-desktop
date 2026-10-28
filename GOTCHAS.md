@@ -1,5 +1,6 @@
 # Gotchas
 
+- Public documentation cannot use the private-repository runner group or its cleanup hooks. Its dedicated hosted workflow publishes the existing guides through MkDocs; the lowercase URL mapping belongs in `scripts/docs_site.py`, while Markdown links keep the original source paths. Keep strict link checks and the project-path HTTP tests enabled so missing setup-guide links or root-relative assets cannot silently reach Pages.
 - A Docker image digest and a UA semantic version are related but not interchangeable. Execution trusts the digest; UI and release notes show the version.
 - A private GHCR image requires Docker-level authentication; public images do not. Tauri does not receive GitHub tokens.
 - Finder and Login Items do not reliably inherit a shell PATH. Docker lookup must retain the standard absolute Docker Desktop locations.

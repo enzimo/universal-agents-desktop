@@ -16,7 +16,7 @@ Public images do not need a login. If the registry requires access, use **Advanc
 
 If Docker is already signed in, choose **Verify access and retry**. Verification inspects the exact locked image manifest; a successful login alone is not sufficient. Network failures and missing package permissions can both prevent verification. The app never switches to a public or mutable image.
 
-If the app requests a credential helper, follow the optional private-access section of the [setup guide](setup.html). With Colima on macOS, install `docker-credential-helper` through Homebrew and configure `osxkeychain`; with Docker Desktop, repair its credential-store configuration. GHCR's effective `credHelpers` override or `credsStore` must be `desktop` or `osxkeychain`. The app refuses plaintext token storage and does not rewrite Docker configuration. Signing in replaces the shared Docker GHCR account, so other Docker clients will use it too.
+If the app requests a credential helper, follow the optional private-access section of the [setup guide](https://github.com/enzimo/universal-agents/releases/latest/download/setup-guide.html). With Colima on macOS, install `docker-credential-helper` through Homebrew and configure `osxkeychain`; with Docker Desktop, repair its credential-store configuration. GHCR's effective `credHelpers` override or `credsStore` must be `desktop` or `osxkeychain`. The app refuses plaintext token storage and does not rewrite Docker configuration. Signing in replaces the shared Docker GHCR account, so other Docker clients will use it too.
 
 ## A runtime port is already in use
 

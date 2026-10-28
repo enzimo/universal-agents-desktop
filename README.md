@@ -6,7 +6,8 @@ start, stop, logs, workspace selection, and update controls.
 
 ## Get started
 
-Follow [QUICKSTART.md](QUICKSTART.md), or download and open the
+Read the [documentation website](https://enzimo.github.io/universal-agents-desktop/)
+or follow [QUICKSTART.md](QUICKSTART.md). You can also download and open the
 [offline setup guide](https://github.com/enzimo/universal-agents/releases/latest/download/setup-guide.html) for platform-specific commands and initial settings.
 
 - **macOS:** universal Intel/Apple Silicon DMG; use Colima and the Docker CLI.
@@ -16,7 +17,9 @@ Follow [QUICKSTART.md](QUICKSTART.md), or download and open the
 These installers are ad-hoc signed on macOS and unsigned on Windows, and neither
 build is notarized yet, so Gatekeeper or SmartScreen may ask you to confirm the
 first launch. The first start downloads the runtime image.
-The installers and runtime image are private: you need a GitHub account with access (Quickstart step 0).
+The source and desktop installers are public. GitHub CLI sign-in supports the
+launcher's update checks and runtime images that require authentication, as
+described in Quickstart step 0.
 Agents only work while the computer running UA is awake, so keep it from
 sleeping, or run UA on a server with the setup guide.
 
@@ -42,7 +45,7 @@ cargo fmt --all -- --check
 cargo clippy -p ua-desktop-core --all-targets -- -D warnings
 ```
 
-Run every repository shell command through RTK when working as an agent, as described in [`AGENTS.md`](AGENTS.md).
+Run every repository shell command through RTK when working as an agent, as described in [`AGENTS.md`](https://github.com/enzimo/universal-agents-desktop/blob/main/AGENTS.md).
 
 The macOS GitHub Actions workflow performs the real Tauri compilation and produces a universal `.app` and `.dmg`. Releases are ad-hoc signed and not notarized; describing a build as production-signed requires Apple Developer ID signing and notarization.
 
