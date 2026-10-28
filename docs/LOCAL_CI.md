@@ -186,6 +186,20 @@ rtk proxy uv pip compile requirements-docs.txt --generate-hashes --universal --o
 
 ## Install cleanup hooks
 
+On Apple Silicon Macs, Homebrew's Buildx plugin may be registered only in the
+account's Docker configuration. Jobs use a disposable `DOCKER_CONFIG`, so that
+registration does not apply. Provision the plugin in Docker's standard system
+plugin directory. If Homebrew provides the executable and the destination does
+not already exist, a Mac administrator can create the link:
+
+```sh
+rtk proxy sudo install -d -m 0755 /usr/local/lib/docker/cli-plugins
+rtk proxy sudo ln -s /opt/homebrew/opt/docker-buildx/bin/docker-buildx /usr/local/lib/docker/cli-plugins/docker-buildx
+```
+
+Verify `docker buildx version` with an empty `DOCKER_CONFIG` before accepting
+build jobs. This preserves the job's Docker credential isolation.
+
 Install a reviewed copy of `.github/runner/ci_hook.py` outside both the runner
 application directory and its work directory. Run the installer from system
 Python, with the runner idle. The following paths are examples, not host config.
