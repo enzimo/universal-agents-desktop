@@ -110,12 +110,13 @@ private repositories. Each installed hook separately lists approved public
 repositories in `public_repositories` in its `config.json`, outside the checkout.
 Only add Universal Agents and Desktop to that public list for this rollout.
 
-The hook accepts pushes, schedules, manual runs, and pull requests whose head
+For public work, the hook accepts pushes, schedules, manual runs, and PRs whose head
 and base both belong to the configured repository. Fork PRs, missing or mismatched
 repository identity, `pull_request_target`, `workflow_run`, and other events are
 refused before job state or commands are created. Same-repository branches are
 trusted team code: only people and automation trusted with the machines may push
 them. Public documentation validation stays on disposable hosted runners.
+Private repositories sharing the hosts keep their existing non-PR trigger policy.
 
 Every local job requires `UA_CI_PUBLIC_JOB_POLICY_VERSION=1` beside the existing
 hook/cache markers. Install the reviewed hook and public allowlist before enabling
