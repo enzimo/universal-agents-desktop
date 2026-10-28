@@ -276,6 +276,19 @@ On WSL the hook installer requires `--reserve-path /mnt/c`, or the mount for
 the Windows drive actually holding the distro VHD. This checks physical Windows
 free space as well as Linux filesystem space before admitting a job.
 
+### Runner recovery
+
+If the dedicated CI distribution reports I/O errors before it can start a
+command, first check that its runners are offline and no job is active. Restarting
+the distribution stops every process inside it. With the operator's approval,
+terminate only that distribution, then start it again and verify command execution
+and both runner services. Keep Docker Desktop and other distributions untouched.
+If the error remains, investigate it before accepting more jobs.
+
+Keep the Mac awake while it serves CI. For a temporary verification session,
+run `rtk proxy caffeinate -dimsu` in a terminal and leave it running until the
+jobs finish. A launch agent cannot accept work while its host is asleep.
+
 ### WSL disk maintenance
 
 The inspected WSL 2.7.13 installation rejects sparse VHD activation because of
