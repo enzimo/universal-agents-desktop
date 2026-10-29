@@ -1,5 +1,6 @@
 # Gotchas
 
+- GitHub repository and release visibility does not set GHCR container-package visibility. Check the package setting and an anonymous image request before documenting a setup without registry sign-in. The current app's in-app update checker separately uses signed-in GitHub CLI, including for public repositories.
 - Public documentation uses a dedicated hosted workflow; native CI accepts only approved repositories and same-repository PRs through installed host hooks. Its hosted workflow publishes the existing guides through MkDocs; the lowercase URL mapping belongs in `scripts/docs_site.py`, while Markdown links keep the original source paths. Keep strict link checks and the project-path HTTP tests enabled so missing setup-guide links or root-relative assets cannot silently reach Pages.
 - A Docker image digest and a UA semantic version are related but not interchangeable. Execution trusts the digest; UI and release notes show the version.
 - A private GHCR image requires Docker-level authentication; public images do not. Tauri does not receive GitHub tokens.

@@ -25,9 +25,10 @@ For platform-specific commands and initial settings, use the
 These installers are ad-hoc signed on macOS and unsigned on Windows, and neither
 build is notarized yet, so Gatekeeper or SmartScreen may ask you to confirm the
 first launch. The first start downloads the runtime image.
-The source and desktop installers are public. GitHub CLI sign-in supports the
-launcher's update checks and runtime images that require authentication, as
-described in Quickstart step 0.
+The source and desktop installers are public; download installers in your
+browser without a GitHub account. The launcher's current update checker uses
+signed-in GitHub CLI, and private runtime images require registry access. See
+[optional GitHub CLI and private images](https://enzimo.github.io/universal-agents-desktop/quickstart/#optional-github-cli-and-private-images).
 Agents only work while the computer running UA is awake, so keep it from
 sleeping, or run UA on a server with the setup guide.
 
