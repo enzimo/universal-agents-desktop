@@ -94,7 +94,7 @@ jobs:
         run: python -m pip install --require-hashes -r requirements-docs.lock.txt
 
       - name: Test documentation routes, links and publishing rules
-        run: python -m unittest discover -s tests -p test_docs.py -v
+        run: python -m unittest discover -s tests/docs -v
 
       - name: Build GitHub Pages artifact
         env:

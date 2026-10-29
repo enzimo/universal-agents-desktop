@@ -2,8 +2,8 @@ name: Compatibility list
 
 # Verifies changes to compatible-runtimes.json against UA's published releases
 # and merges automated UA release pull requests that pass every check.
-# See docs/COMPATIBILITY_LIST.md. GitHub auto-merge and branch protection are
-# unavailable for this private repository on its plan, so this workflow merges.
+# See docs/COMPATIBILITY_LIST.md. The merge job requires successful native
+# checks, the exact checked commit, and a change limited to the release list.
 
 on:
   pull_request:
@@ -34,7 +34,7 @@ defaults:
 jobs:
   check:
     name: Verify compatibility list (${{ matrix.platform }})
-    if: github.event.repository.private && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     strategy:
       fail-fast: false
       matrix:
@@ -50,7 +50,7 @@ jobs:
       packages: read
     steps:
       - name: Require managed local runner
-        run: node -e "if (process.env.UA_CI_HOOK_VERSION !== '1' || process.env.UA_CI_BUILD_CACHE_VERSION !== '1') throw new Error('Install the reviewed CI cleanup hooks before running jobs')"
+        run: node -e "if (process.env.UA_CI_HOOK_VERSION !== '1' || process.env.UA_CI_PUBLIC_JOB_POLICY_VERSION !== '1' || process.env.UA_CI_BUILD_CACHE_VERSION !== '1') throw new Error('Install the reviewed CI cleanup hooks before running jobs')"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Check the exact pull request commit, not GitHub's merge preview, so
@@ -63,8 +63,6 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p 'test_*.py' -v
           python3 -m unittest discover -s .github/runner -v
-      - name: Install reviewed recovery for named test volumes and networks
-        run: python3 .github/runner/upgrade_cleanup.py
       - name: Require UA read token
         env:
           UA_READ_TOKEN: ${{ secrets.UA_READ_TOKEN }}
@@ -120,7 +118,7 @@ jobs:
     # An unconditional summary job survives cancellation and can hold the
     # concurrency slot while a newer commit's checks wait. Failed checks already
     # report their reasons; schedule a merge only for a verified release entry.
-    if: needs.check.result == 'success' && github.event_name == 'pull_request' && github.event.repository.private && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'ua-release/')
+    if: needs.check.result == 'success' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'ua-release/')
     runs-on: [self-hosted, Linux, X64, ua-build, ua-linux]
     timeout-minutes: 10
     permissions:
@@ -128,7 +126,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Require managed local runner
-        run: node -e "if (process.env.UA_CI_HOOK_VERSION !== '1' || process.env.UA_CI_BUILD_CACHE_VERSION !== '1') throw new Error('Install the reviewed CI cleanup hooks before running jobs')"
+        run: node -e "if (process.env.UA_CI_HOOK_VERSION !== '1' || process.env.UA_CI_PUBLIC_JOB_POLICY_VERSION !== '1' || process.env.UA_CI_BUILD_CACHE_VERSION !== '1') throw new Error('Install the reviewed CI cleanup hooks before running jobs')"
       - name: Merge only a verified, list-only UA release pull request
         env:
           GH_TOKEN: ${{ github.token }}

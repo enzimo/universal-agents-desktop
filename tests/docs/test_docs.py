@@ -17,7 +17,7 @@ from urllib.request import urlopen
 
 import yaml
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 SITE_PATH = "/universal-agents-desktop/"
 
 
@@ -122,6 +122,17 @@ class DocumentationWorkflowTests(unittest.TestCase):
         self.assertEqual(upload["with"]["path"], "site")
         self.assertEqual(upload["with"]["retention-days"], "7")
         self.assertNotIn("continue-on-error", upload)
+
+    def test_local_jobs_require_the_public_job_policy_and_exclude_forks(self):
+        for path in (ROOT / ".github/workflows").glob("*.yml"):
+            if path.name == "publish-docs.yml":
+                continue
+            workflow = yaml.load(path.read_text(), Loader=yaml.BaseLoader)
+            for name, job in workflow["jobs"].items():
+                with self.subTest(workflow=path.name, job=name):
+                    self.assertNotIn("repository.private", job["if"])
+                    self.assertIn("pull_request", job["if"])
+                    self.assertIn("UA_CI_PUBLIC_JOB_POLICY_VERSION", job["steps"][0]["run"])
 
     def test_publish_conditions_allow_main_and_stable_tags_only(self):
         workflow = self.workflow

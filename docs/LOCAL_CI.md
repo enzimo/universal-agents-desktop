@@ -24,8 +24,9 @@ registration instead of installing global emulation handlers each time.
 The public documentation site is the exception to these local-runner requirements.
 See [Documentation publishing](#documentation-publishing) below.
 
-Use an organization runner group open to all of the organization's private
-repositories and closed to public ones. Fork pull requests are excluded. Assign the custom labels only after installing
+Use an organization runner group restricted to approved repositories, with public
+access enabled only after installing the reviewed host policy. Fork PRs cannot
+use local hosts. Assign the custom labels only after installing
 the cleanup hooks. Each runner process needs its own application, work, hook,
 and state directories. Do not share a work directory or tool cache between
 runner processes. Keep the native Windows runner in the signed-in account so
@@ -102,6 +103,38 @@ to Windows also requires discard/trim and sparse VHD support. Enable the distro'
 check Windows free space as well as `df`. Do not shut down all WSL distributions
 or compact Docker Desktop's VHD during CI. See [Microsoft's WSL disk guidance](https://learn.microsoft.com/en-us/windows/wsl/disk-space).
 
+## Local CI for public repositories
+
+The runner group selects approved repositories, retaining any already approved
+private repositories. Each installed hook separately lists approved public
+repositories in `public_repositories` in its `config.json`, outside the checkout.
+Only add Universal Agents and Desktop to that public list for this rollout.
+
+After an API update, read back both repository and workflow access. Include
+`selected_workflows` in each update while workflow restrictions are enabled;
+omitting it clears the list and leaves jobs queued even when runners are online.
+Group policy updates can also clear selected repositories. Apply the repository
+list after the final group update, then verify both lists again.
+
+For public work, the hook accepts pushes, schedules, manual runs, and PRs whose head
+and base both belong to the configured repository. Fork PRs, missing or mismatched
+repository identity, `pull_request_target`, `workflow_run`, and other events are
+refused before job state or commands are created. Same-repository branches are
+trusted team code: only people and automation trusted with the machines may push
+them. Public documentation validation stays on disposable hosted runners.
+Private repositories sharing the hosts keep their existing non-PR trigger policy.
+
+Every local job requires `UA_CI_PUBLIC_JOB_POLICY_VERSION=1` beside the existing
+hook/cache markers. Install the reviewed hook and public allowlist before enabling
+group access. Preserve host paths, disk reserves, caches and private-repository
+entries. Jobs no longer replace installed hooks with a checkout's copy.
+
+The standard-library runner tests exercise accepted public work and rejected
+fork/unsupported events. Documentation tests live under `tests/docs/` in their
+own locked environment, so native compatibility checks do not need MkDocs. After
+installation, dispatch **Local runner preflight**, inspect cleanup, and confirm
+all four runners are online. This validation publishes no releases or images.
+
 ## Documentation publishing
 
 The site is published at [Universal Agents Desktop documentation](https://enzimo.github.io/universal-agents-desktop/),
@@ -110,7 +143,7 @@ with the quickstart under `/universal-agents-desktop/quickstart/`.
 It publishes automatically after a push to `main` or a stable `vX.Y.Z` tag, or a
 manual run on either ref. Pull requests validate without uploading or deploying.
 Feature branches and pre-release tags cannot deploy. Native build workflows and
-their private-repository guards remain separate.
+their installed public-job policy remain separate.
 
 In **Settings > Pages > Build and deployment**, select **GitHub Actions** as the
 source. The `github-pages` environment permits branch `main` and tag pattern
@@ -137,7 +170,7 @@ Use an isolated environment for documentation tools:
 ```sh
 rtk proxy python3 -m venv .venv
 PATH="$PWD/.venv/bin:$PATH" rtk proxy python -m pip install --require-hashes -r requirements-docs.lock.txt
-PATH="$PWD/.venv/bin:$PATH" rtk proxy python -m unittest discover -s tests -p test_docs.py -v
+PATH="$PWD/.venv/bin:$PATH" rtk proxy python -m unittest discover -s tests/docs -v
 PATH="$PWD/.venv/bin:$PATH" rtk proxy python -m mkdocs build --strict
 PATH="$PWD/.venv/bin:$PATH" rtk proxy python -m mkdocs serve
 ```
@@ -159,6 +192,26 @@ rtk proxy uv pip compile requirements-docs.txt --generate-hashes --universal --o
 
 ## Install cleanup hooks
 
+On Apple Silicon Macs, Homebrew's Buildx plugin may be registered only in the
+account's Docker configuration. Jobs use a disposable `DOCKER_CONFIG`, so that
+registration does not apply. Provision the plugin in Docker's standard system
+plugin directory. If Homebrew provides the executable and the destination does
+not already exist, a Mac administrator can create the link after checking the directory.
+
+Check the directory itself for a dangling link first. A removed Docker Desktop
+installation can leave `/usr/local/lib/docker/cli-plugins` pointing at its missing
+application folder. This makes `install -d` fail with a `stat` error. Verify that
+the link is broken and points at the removed application, then move only that
+link to an unused backup name before creating the real directory and plugin link:
+
+```sh
+rtk proxy sudo install -d -m 0755 /usr/local/lib/docker/cli-plugins
+rtk proxy sudo ln -s /opt/homebrew/opt/docker-buildx/bin/docker-buildx /usr/local/lib/docker/cli-plugins/docker-buildx
+```
+
+Verify `docker buildx version` with an empty `DOCKER_CONFIG` before accepting
+build jobs. This preserves the job's Docker credential isolation.
+
 Install a reviewed copy of `.github/runner/ci_hook.py` outside both the runner
 application directory and its work directory. Run the installer from system
 Python, with the runner idle. The following paths are examples, not host config.
@@ -170,7 +223,9 @@ rtk proxy python3 .github/runner/install_hooks.py \
   --runner /opt/actions-runner \
   --destination /opt/ua-ci-hooks \
   --repository enzimo/universal-agents-desktop \
-  --repository enzimo/universal-agents
+  --repository enzimo/universal-agents \
+  --public-repository enzimo/universal-agents-desktop \
+  --public-repository enzimo/universal-agents
 ```
 
 On Windows use `python3` from the signed-in account and Windows paths. The
@@ -247,6 +302,29 @@ On WSL the hook installer requires `--reserve-path /mnt/c`, or the mount for
 the Windows drive actually holding the distro VHD. This checks physical Windows
 free space as well as Linux filesystem space before admitting a job.
 
+### Runner recovery
+
+If the dedicated CI distribution reports I/O errors before it can start a
+command, first check that its runners are offline and no job is active. Restarting
+the distribution stops every process inside it. With the operator's approval,
+terminate only that distribution, then start it again and verify command execution
+and both runner services. Keep Docker Desktop and other distributions untouched.
+If the error remains, investigate it before accepting more jobs.
+
+Keep the Mac awake while it serves CI. For a temporary verification session,
+run `rtk proxy caffeinate -dimsu` in a terminal and leave it running until the
+jobs finish. A launch agent cannot accept work while its host is asleep.
+
+If an assigned Windows job never starts a workflow step, inspect the listener's
+worker-startup logs. A 30-second worker-channel timeout recovered after restarting
+the idle runner's existing interactive task during this rollout; its initial cause
+remains unconfirmed. End the stalled job and verify no worker is active before
+restarting that task. Keep the logs if it recurs.
+
+OpenSSH can report `WinError 448` when traversing a runner's versioned junctions
+even though the physical binaries start. An SSH-only error does not establish why
+an interactive runner failed; inspect that runner's logs before changing its files.
+
 ### WSL disk maintenance
 
 The inspected WSL 2.7.13 installation rejects sparse VHD activation because of
@@ -271,9 +349,10 @@ keep the Windows disk reserve check enabled between maintenance windows.
 
 ## Activated runners
 
-The organization runner group `Universal Agents` is open to every private
-repository in the organization and closed to public repositories, so a
-stranger's pull request to a public repository can never run on these hosts. Three runners, one each for Windows, macOS and Linux (WSL), use
+The organization runner group `Universal Agents` selects approved repositories,
+and installed hooks refuse fork PRs even if a workflow requests a local runner.
+Four runners, one each for Windows and macOS plus two Linux runners in the
+dedicated WSL distribution, use
 the reviewed labels and installed cleanup hooks. A maintainer administers them
 through a delegated runner role while their base organization membership
 remains `member`. Keep each host's runner names, accounts and folders in that

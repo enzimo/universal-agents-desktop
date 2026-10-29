@@ -140,9 +140,8 @@ the native job summaries. The merge job reports any remaining refusal, such as
 additional changed files or a moved head. It does not use an unconditional job
 that could hold the workflow's concurrency slot after cancellation.
 
-GitHub's built-in auto-merge is not used because it needs branch
-protection, which this private repository's plan does not offer. The merge
-uses the workflow's own token, so the merge commit does not start other
+The workflow performs the exact-head, list-only merge after its native checks.
+It uses the workflow's own token, so the merge commit does not start other
 workflows. The CI and native-build workflows ignore list-only changes anyway.
 Squash merging must stay enabled in the repository settings.
 
