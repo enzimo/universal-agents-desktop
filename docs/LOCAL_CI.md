@@ -1,7 +1,8 @@
 # Local CI
 
-All active workflows select self-hosted runners. This includes tests, audits,
-documentation, development installers, and the existing release workflows.
+Native tests, audits, development installers, and release workflows select
+self-hosted runners. Documentation builds and deployment use disposable
+GitHub-hosted runners so public contributions cannot execute on personal hosts.
 Release triggers are unchanged. Running CI does not authorize a release.
 
 | Runner labels, in addition to `self-hosted, ua-build` | Work |
@@ -19,6 +20,9 @@ Preflight builds and runs both architectures; jobs check the existing binfmt
 registration instead of installing global emulation handlers each time.
 
 ## Host requirements
+
+The public documentation site is the exception to these local-runner requirements.
+See [Documentation publishing](#documentation-publishing) below.
 
 Use an organization runner group open to all of the organization's private
 repositories and closed to public ones. Fork pull requests are excluded. Assign the custom labels only after installing
@@ -98,6 +102,61 @@ to Windows also requires discard/trim and sparse VHD support. Enable the distro'
 check Windows free space as well as `df`. Do not shut down all WSL distributions
 or compact Docker Desktop's VHD during CI. See [Microsoft's WSL disk guidance](https://learn.microsoft.com/en-us/windows/wsl/disk-space).
 
+## Documentation publishing
+
+The site is published at [Universal Agents Desktop documentation](https://enzimo.github.io/universal-agents-desktop/),
+with the quickstart under `/universal-agents-desktop/quickstart/`.
+`publish-docs.yml` tests and builds it on GitHub-hosted `ubuntu-24.04` runners.
+It publishes automatically after a push to `main` or a stable `vX.Y.Z` tag, or a
+manual run on either ref. Pull requests validate without uploading or deploying.
+Feature branches and pre-release tags cannot deploy. Native build workflows and
+their private-repository guards remain separate.
+
+In **Settings > Pages > Build and deployment**, select **GitHub Actions** as the
+source. The `github-pages` environment permits branch `main` and tag pattern
+`v*.*.*`; the workflow excludes pre-release tags and checks tag syntax. To retry a
+main deployment, open **Actions > Publish Documentation > Run workflow** and
+select `main`. The build token has only `contents: read` and `pages: read`; only
+the guarded deployment job receives `pages: write` and `id-token: write`.
+
+The workflow verifies the SHA-256 of RTK 0.51.0 before installing it through a
+JavaScript action. Subsequent shell steps run through RTK. Python 3.13 and Node.js
+24.20.0 come from pinned setup actions. No local hook, `UA_CI_PYTHON`, Docker,
+Rust compiler, native desktop session, or secret is needed to build the site.
+
+`mkdocs.yml` uses the Material theme and the existing Markdown guides as its
+source. `scripts/docs_site.py` maps repository paths into MkDocs without copying
+the guides. MkDocs resolves links against their original paths and writes
+lowercase page URLs. The hook includes only the documentation folder and its
+listed root files, so local configuration, credentials and build output are not
+published. Theme files keep their own paths. This website changes no launcher UI,
+so the desktop-only `ui/DESIGN.md` needs no change.
+
+Use an isolated environment for documentation tools:
+
+```sh
+rtk proxy python3 -m venv .venv
+PATH="$PWD/.venv/bin:$PATH" rtk proxy python -m pip install --require-hashes -r requirements-docs.lock.txt
+PATH="$PWD/.venv/bin:$PATH" rtk proxy python -m unittest discover -s tests -p test_docs.py -v
+PATH="$PWD/.venv/bin:$PATH" rtk proxy python -m mkdocs build --strict
+PATH="$PWD/.venv/bin:$PATH" rtk proxy python -m mkdocs serve
+```
+
+The docs tests build the real site, serve it under the project URL path, check
+every generated page's local links and assets, and execute the publication
+conditions against pull requests, public/private repositories, main, stable and
+pre-release tags. They also execute tag validation against malformed versions.
+The real hosted build and a successful HTTP request to the public quickstart
+complete deployment verification. Native Rust and GUI checks remain required
+for launcher changes; a documentation build does not replace them.
+
+`requirements-docs.txt` owns the documentation dependencies; CI installs its
+hash-checked lock. After changing that input, regenerate the lock with uv 0.13.6:
+
+```sh
+rtk proxy uv pip compile requirements-docs.txt --generate-hashes --universal --output-file requirements-docs.lock.txt
+```
+
 ## Install cleanup hooks
 
 Install a reviewed copy of `.github/runner/ci_hook.py` outside both the runner
@@ -117,7 +176,7 @@ rtk proxy python3 .github/runner/install_hooks.py \
 On Windows use `python3` from the signed-in account and Windows paths. The
 installer writes platform-specific wrappers and updates the runner's `.env`.
 Restart the idle runner afterward. Do not set `UA_CI_HOOK_VERSION` manually.
-Every job checks that the started hook actually exported it.
+Every local-runner job checks that the started hook actually exported it.
 
 The hook implementation is mirrored in both repositories so either checkout can
 provision a host. Keep the files identical when changing their contract. Their

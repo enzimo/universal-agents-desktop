@@ -1,0 +1,55 @@
+site_name: Universal Agents Desktop
+site_description: Installation and operating guides for the Universal Agents desktop launcher.
+site_url: !ENV [UA_DOCS_SITE_URL, "http://127.0.0.1:8000/universal-agents-desktop/"]
+repo_url: https://github.com/enzimo/universal-agents-desktop
+edit_uri: blob/main/
+docs_dir: docs
+site_dir: site
+strict: true
+use_directory_urls: true
+
+hooks:
+  - scripts/docs_site.py
+
+theme:
+  name: material
+  favicon: favicon.svg
+  features:
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+  palette:
+    - scheme: default
+      primary: green
+      accent: green
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+
+validation:
+  links:
+    not_found: warn
+    anchors: warn
+
+nav:
+  - Overview: README.md
+  - Quickstart: QUICKSTART.md
+  - Using the launcher: docs/USAGE.md
+  - Troubleshooting: docs/TROUBLESHOOTING.md
+  - Runtime compatibility: docs/COMPATIBILITY_LIST.md
+  - Development:
+      - Architecture: docs/ARCHITECTURE.md
+      - Runtime integration: docs/RUNTIME_INTEGRATION.md
+      - Platform testing: docs/PLATFORM_TESTING.md
+      - Native UI tests: tests/ui/README.md
+      - CI and documentation publishing: docs/LOCAL_CI.md
+      - Releases: docs/RELEASE.md
+      - Contributing: CONTRIBUTING.md
+      - Security: SECURITY.md

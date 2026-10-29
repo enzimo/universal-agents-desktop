@@ -1,0 +1,3 @@
+# Documentation tools only. The desktop application keeps its Rust/Node graphs.
+mkdocs>=1.6.1,<2
+mkdocs-material>=9.8.0,<10

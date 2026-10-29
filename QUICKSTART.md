@@ -6,12 +6,12 @@ Already using a hosted service? Open its URL in your browser and sign in. You do
 
 **Agents need a computer that stays on.** The app runs UA on this computer, and agents stop working while it sleeps. Set it not to sleep while plugged in (the app names the setting the first time it opens), or, if you are comfortable with Docker, run UA on a server with the setup guide instead.
 
-## 0. Get access
+## 0. Set up GitHub CLI
 
-The desktop app, the UA runtime image and the setup guide are private. You need a GitHub account that the maintainer has invited.
+The desktop source and release installers are public. Set up GitHub CLI for the
+launcher's update checks and for any private runtime image you use.
 
-1. Accept both invitations, to `enzimo/universal-agents-desktop` and `enzimo/universal-agents`, from the invitation emails or [github.com/notifications](https://github.com/notifications).
-2. Install [GitHub CLI](https://cli.github.com/) and sign in with permission to download packages:
+1. Install [GitHub CLI](https://cli.github.com/) and sign in with permission to download packages:
 
    ```sh
    gh auth login --hostname github.com --web --scopes read:packages
@@ -73,7 +73,7 @@ The macOS app is ad-hoc signed and not notarized, and Windows installers are uns
 
 Docker needs a credential helper before it can save your GitHub login; the app says so and explains the fix. On macOS with Colima, run `brew install docker-credential-helper` and set `"credsStore": "osxkeychain"` in `~/.docker/config.json`. The HTML guide has instructions for each platform.
 
-In **Advanced Settings > Private Image Access**, **Sign in with gh** opens GitHub's browser login and continues installation afterward. **Use GitHub CLI** reuses an existing login. If Docker is already signed in, choose **Verify access and retry**. Access is still refused if your account has not accepted the `enzimo/universal-agents` invitation or your GitHub CLI login lacks `read:packages`.
+In **Advanced Settings > Private Image Access**, **Sign in with gh** opens GitHub's browser login and continues installation afterward. **Use GitHub CLI** reuses an existing login. If Docker is already signed in, choose **Verify access and retry**. Access to a private image is still refused if your account cannot read it or your GitHub CLI login lacks `read:packages`.
 
 </details>
 
