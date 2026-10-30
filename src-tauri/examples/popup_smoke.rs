@@ -26,6 +26,7 @@ const ALL: usize =
 static DOWNLOAD_DIR: OnceLock<std::path::PathBuf> = OnceLock::new();
 
 fn save_download(name: &str) -> Option<std::path::PathBuf> {
+    println!("Popup event: save requested for {name}");
     match name {
         "cancel.txt" => {
             PASSED.fetch_or(CANCEL_DOWNLOAD, Ordering::SeqCst);
@@ -44,6 +45,32 @@ const EXPECTED_PAGES: usize = 3;
 const EXTERNAL_URL: &str = "https://example.invalid/external";
 
 static PASSED: AtomicUsize = AtomicUsize::new(0);
+
+/// WebView2 limits successive automatic downloads without a user gesture.
+/// Exercise each button with a simulated gesture, as a person does in setup.
+/// This stays in the probe; the shipping app retains the browser's policy.
+#[cfg(windows)]
+fn click_download(window: &tauri::WebviewWindow, kind: &str) {
+    let parameters = serde_json::json!({
+        "expression": format!("window.uaSmokeDownload({})", serde_json::to_string(kind).unwrap()),
+        "userGesture": true,
+    })
+    .to_string();
+    window
+        .with_webview(move |view| unsafe {
+            use windows::core::HSTRING;
+            view.controller()
+                .CoreWebView2()
+                .unwrap()
+                .CallDevToolsProtocolMethod(
+                    &HSTRING::from("Runtime.evaluate"),
+                    &HSTRING::from(parameters),
+                    None,
+                )
+                .expect("simulate the download button's user gesture");
+        })
+        .expect("access the probe webview");
+}
 
 #[tauri::command]
 fn runtime_status() -> String {
@@ -173,11 +200,19 @@ fn main() {
                 link.href = href; link.download = name;
                 document.body.append(link); link.click(); link.remove();
               }}
-              setTimeout(() => download('/download', 'instance_config.yaml'), 7000);
-              setTimeout(() => download(URL.createObjectURL(new Blob(['FIXTURE=only\n'], {{type: 'text/plain'}})), 'team.env'), 9000);
-              setTimeout(() => download(URL.createObjectURL(new Blob(['cancel me'], {{type: 'text/plain'}})), 'cancel.txt'), 11000);
+              window.uaSmokeDownload = (kind) => {{
+                if (kind === 'http') download('/download', 'instance_config.yaml');
+                if (kind === 'blob') download(URL.createObjectURL(new Blob(['FIXTURE=only\n'], {{type: 'text/plain'}})), 'team.env');
+                if (kind === 'cancel') download(URL.createObjectURL(new Blob(['cancel me'], {{type: 'text/plain'}})), 'cancel.txt');
+              }};
+              if (!{native_gestures}) {{
+                setTimeout(() => window.uaSmokeDownload('http'), 7000);
+                setTimeout(() => window.uaSmokeDownload('blob'), 9000);
+                setTimeout(() => window.uaSmokeDownload('cancel'), 11000);
+              }}
             }}, 800);
-            </script>"#
+            </script>"#,
+                native_gestures = cfg!(windows),
             )
         }
     });
@@ -199,7 +234,19 @@ fn main() {
             .unwrap();
             let handle = app.handle().clone();
             std::thread::spawn(move || {
-                for _ in 0..450 {
+                for tick in 0..450 {
+                    #[cfg(windows)]
+                    if let Some(kind) = match tick {
+                        80 => Some("http"),
+                        100 => Some("blob"),
+                        120 => Some("cancel"),
+                        _ => None,
+                    } {
+                        let window = handle.get_webview_window("webchat-smoke").unwrap();
+                        click_download(&window, kind);
+                    }
+                    #[cfg(not(windows))]
+                    let _ = tick;
                     for (name, expected, bit) in [
                         ("instance_config.yaml", "fixture: config\n", HTTP_DOWNLOAD),
                         ("team.env", "FIXTURE=only\n", BLOB_DOWNLOAD),

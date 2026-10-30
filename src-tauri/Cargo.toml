@@ -47,3 +47,6 @@ required-features = ["ui-test"]
 
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = "=2.0.2"
+
+[target.'cfg(windows)'.dev-dependencies]
+windows = "=0.61.3"

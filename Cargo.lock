@@ -4595,6 +4595,7 @@ dependencies = [
  "tempfile",
  "ua-desktop-core",
  "webkit2gtk",
+ "windows",
 ]
 
 [[package]]
