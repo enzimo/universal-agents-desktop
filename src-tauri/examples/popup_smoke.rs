@@ -47,27 +47,59 @@ const EXTERNAL_URL: &str = "https://example.invalid/external";
 static PASSED: AtomicUsize = AtomicUsize::new(0);
 
 /// WebView2 limits successive automatic downloads without a user gesture.
-/// Exercise each button with a simulated gesture, as a person does in setup.
+/// Send mouse input to each visible button, as a person does in setup. Merely
+/// setting Runtime.evaluate's userGesture flag does not reset that limit.
 /// This stays in the probe; the shipping app retains the browser's policy.
 #[cfg(windows)]
 fn click_download(window: &tauri::WebviewWindow, kind: &str) {
     let parameters = serde_json::json!({
-        "expression": format!("window.uaSmokeDownload({})", serde_json::to_string(kind).unwrap()),
-        "userGesture": true,
-    })
-    .to_string();
+        "expression": format!("(() => {{ const r = document.getElementById({}).getBoundingClientRect(); return {{x: r.x + r.width / 2, y: r.y + r.height / 2}}; }})()", serde_json::to_string(&format!("probe-{kind}")).unwrap()),
+        "returnByValue": true,
+    }).to_string();
     window
         .with_webview(move |view| unsafe {
             use windows::core::HSTRING;
-            view.controller()
-                .CoreWebView2()
-                .unwrap()
-                .CallDevToolsProtocolMethod(
-                    &HSTRING::from("Runtime.evaluate"),
-                    &HSTRING::from(parameters),
-                    None,
-                )
-                .expect("simulate the download button's user gesture");
+            let core = view.controller().CoreWebView2().unwrap();
+            let click_core = core.clone();
+            let positioned = webview2_com::CallDevToolsProtocolMethodCompletedHandler::create(
+                Box::new(move |status, result| {
+                    status?;
+                    let result: serde_json::Value =
+                        serde_json::from_str(&result).expect("probe button bounds result");
+                    let point = &result["result"]["value"];
+                    let x = point["x"].as_f64().expect("probe button x");
+                    let y = point["y"].as_f64().expect("probe button y");
+                    let event = |kind| {
+                        serde_json::json!({"type":kind,"x":x,"y":y,"button":"left","clickCount":1})
+                            .to_string()
+                    };
+                    let release_core = click_core.clone();
+                    let release = event("mouseReleased");
+                    let pressed = webview2_com::CallDevToolsProtocolMethodCompletedHandler::create(
+                        Box::new(move |status, _| {
+                            status?;
+                            release_core.CallDevToolsProtocolMethod(
+                                &HSTRING::from("Input.dispatchMouseEvent"),
+                                &HSTRING::from(release),
+                                None,
+                            )?;
+                            Ok(())
+                        }),
+                    );
+                    click_core.CallDevToolsProtocolMethod(
+                        &HSTRING::from("Input.dispatchMouseEvent"),
+                        &HSTRING::from(event("mousePressed")),
+                        &pressed,
+                    )?;
+                    Ok(())
+                }),
+            );
+            core.CallDevToolsProtocolMethod(
+                &HSTRING::from("Runtime.evaluate"),
+                &HSTRING::from(parameters),
+                &positioned,
+            )
+            .expect("locate the probe download button");
         })
         .expect("access the probe webview");
 }
@@ -175,7 +207,11 @@ fn main() {
                 .into()
         } else {
             format!(
-                r#"<h1>Native popup smoke test</h1><script>
+                r#"<h1>Native popup smoke test</h1>
+            <button id="probe-http" onclick="window.uaSmokeDownload('http')">HTTP download</button>
+            <button id="probe-blob" onclick="window.uaSmokeDownload('blob')">Blob download</button>
+            <button id="probe-cancel" onclick="window.uaSmokeDownload('cancel')">Cancel download</button>
+            <script>
             document.cookie = 'ua_smoke=shared; path=/';
             function clickBlank(href) {{
               let link = document.createElement('a');
@@ -201,6 +237,7 @@ fn main() {
                 document.body.append(link); link.click(); link.remove();
               }}
               window.uaSmokeDownload = (kind) => {{
+                fetch('/event?download=' + kind);
                 if (kind === 'http') download('/download', 'instance_config.yaml');
                 if (kind === 'blob') download(URL.createObjectURL(new Blob(['FIXTURE=only\n'], {{type: 'text/plain'}})), 'team.env');
                 if (kind === 'cancel') download(URL.createObjectURL(new Blob(['cancel me'], {{type: 'text/plain'}})), 'cancel.txt');
@@ -221,6 +258,11 @@ fn main() {
     let mut context = tauri::generate_context!();
     context.config_mut().app.windows.clear();
     tauri::Builder::default()
+        .plugin(tauri_plugin_log::Builder::new()
+            .level(log::LevelFilter::Debug)
+            .targets([tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout)
+                .filter(|metadata| metadata.target().starts_with("universal_agents_desktop"))])
+            .build())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![runtime_status])

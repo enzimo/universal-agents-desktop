@@ -116,6 +116,11 @@ fn build_page(
         .inner_size(1280.0, crate::window_size::WEB_UI_HEIGHT)
         .min_inner_size(860.0, 620.0)
         .on_navigation(move |url| {
+            log::debug!(
+                "Web UI navigation: scheme={}, allowed={}",
+                url.scheme(),
+                loads_in_app(url, ports, child)
+            );
             if loads_in_app(url, ports, child) {
                 if !is_blank(url) {
                     loaded.store(true, Ordering::SeqCst);
@@ -149,6 +154,11 @@ fn build_page(
     // every child would process each download several times.
     if !cfg!(target_os = "linux") || !child {
         builder = builder.on_download(move |view, event| {
+            match &event {
+                tauri::webview::DownloadEvent::Requested { url, .. } => log::debug!("Web UI download requested: scheme={}", url.scheme()),
+                tauri::webview::DownloadEvent::Finished { url, success, .. } => log::debug!("Web UI download finished: scheme={}, success={success}", url.scheme()),
+                _ => {},
+            }
             if matches!(&event, tauri::webview::DownloadEvent::Requested { url, .. } if !is_runtime_download(url, ports)) {
                 log::warn!("blocked download outside the runtime origin");
                 return false;

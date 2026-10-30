@@ -1,6 +1,6 @@
 # Gotchas
 
-- WebView2 can suppress successive timer-triggered downloads after the first file, before the native download callback runs. The native download probe supplies a user gesture for each action through test-only DevTools calls. Do not grant automatic-download permission in the shipping app just to make a timer-driven probe pass.
+- WebView2 can suppress successive timer-triggered downloads after the first file, before the native download callback runs. Setting `Runtime.evaluate`'s `userGesture` flag alone did not reset this limit in the Windows probe. The probe locates visible buttons and sends mouse press/release events through test-only DevTools calls. Do not grant automatic-download permission in the shipping app just to make a timer-driven probe pass.
 
 - UA's Status, Files, and other views share `/webchat` and select their page through `?view=...`. Comparing only URL paths when reusing the main window leaves **Open in app** stuck on those views. Compare the full launch URL, including query and fragment, while avoiding a reload when it already matches.
 - Native picker cancellation must return an explicit no-change result. Returning integration status on cancellation made the renderer run Docker status and log checks while controls stayed disabled, which looked like a restart even though no lifecycle operation occurred. The workspace and subscription pickers return `null` on cancellation; the renderer skips those checks and preserves import-attempt state.
