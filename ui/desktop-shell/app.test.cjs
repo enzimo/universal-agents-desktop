@@ -50,6 +50,7 @@ function setup(responses = {}, windowExtras = {}) {
     window: { localStorage: memoryStorage({ [ALWAYS_ON_SEEN_KEY]: "earlier" }), ...windowExtras, __TAURI__: { event: { listen: async (name, callback) => { progressListener = callback; return () => { progressListener = undefined; }; } }, core: { invoke: async (command, args) => {
       calls.push({ command, args });
       if (responses[command]) return responses[command](args);
+      if (command === "startup_progress") return new Promise(() => {});
       if (command === "registry_access") throw new Error("Access denied");
       // Leave initial refresh pending; each test supplies an explicit runtime state.
       return new Promise(() => {});
@@ -87,6 +88,43 @@ function setup(responses = {}, windowExtras = {}) {
     text: (id) => textOf(elements.get(id)),
   };
 }
+
+test("automatic startup restores download progress for a late-loading launcher without waiting for status", async () => {
+  let snapshot = {active: true, update: {message: "Downloading Universal Agents", current_bytes: 42, total_bytes: 100}};
+  const ui = setup({startup_progress: () => snapshot, runtime_status: () => ({phase: "onboarding", detail: "Setup ready"})});
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(ui.elements.get("#operation-bar").value, 42);
+  assert.equal(ui.elements.get("#operation-bar").max, 100);
+  assert.equal(ui.elements.get("#operation-progress").hidden, false);
+  assert.equal(ui.elements.get("#startup-note").hidden, false);
+  assert.match(ui.text("#status-detail"), /Downloading/);
+  assert.equal(ui.calls.filter(call => call.command === "runtime_status").length, 0);
+  assert.equal(ui.elements.get("#start-runtime").disabled, true);
+  await ui.run("refreshStatus({quiet: true})");
+  assert.equal(ui.calls.filter(call => call.command === "runtime_status").length, 0);
+  snapshot = {active: false, update: {message: "Setup ready"}, error: null};
+  // Integration can remain pending while status and completion are already visible.
+  ui.run("refreshStartupProgress()");
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(ui.elements.get("#operation-bar").hidden, true);
+  assert.equal(ui.elements.get("#startup-note").hidden, true);
+  assert.equal(ui.elements.get("#status-label").textContent, "Setup ready");
+  assert.equal(ui.elements.get("#open-app").disabled, false);
+});
+
+test("automatic startup failure is retained and raw errors stay out of the launcher", async () => {
+  const ui = setup({
+    startup_progress: () => ({active: false, update: {message: "Startup failed"}, error: "raw OS output"}),
+    runtime_status: () => ({phase: "stopped"}),
+    integration_status: () => ({workspace_available: true}),
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(ui.run("operationInFlight"), false);
+  assert.equal(ui.elements.get("#operation-bar").hidden, true);
+  assert.equal(ui.elements.get("#start-runtime").disabled, false);
+  assert.match(ui.text("#notice"), /Download diagnostics/);
+  assert.doesNotMatch(ui.text("#notice"), /raw OS output/);
+});
 
 test("import is enabled during onboarding and ready, with actionable pending copy", () => {
   const ui = setup();
@@ -585,9 +623,36 @@ test("external skill refresh setting persists through the native command", async
   assert.deepEqual(JSON.parse(JSON.stringify(ui.calls.find(call => call.command === "set_external_skill_refresh").args)), {enabled:true});
   assert.equal(toggle.checked, true);
 });
+for (const command of ["choose_workspace", "connect_openai_subscription"]) {
+  test(`cancelling ${command} skips runtime checks and preserves the import attempt`, async () => {
+    const ui = setup({[command]: () => null});
+    ui.run('renderIntegration({workspace_available:true}); renderStatus({phase:"ready"}); automaticImportAttempted = true;');
+    const before = ui.calls.length;
+    await ui.run(`runIntegration(${JSON.stringify(command)})`);
+    assert.deepEqual(ui.calls.slice(before).map(call => call.command), [command]);
+    assert.equal(ui.run("operationInFlight"), false);
+    assert.equal(ui.run("automaticImportAttempted"), true);
+    assert.equal(ui.elements.get("#choose-workspace").disabled, false);
+  });
+}
+
+test("a chosen workspace still refreshes integration and runtime status", async () => {
+  const ui = setup({
+    choose_workspace: () => ({workspace_available: true, workspace_dir: "/fixture/project", openai_subscription_state: "disconnected"}),
+    runtime_status: () => ({phase: "ready"}),
+    recent_logs: () => "fixture logs",
+  });
+  await new Promise(resolve => setImmediate(resolve));
+  const before = ui.calls.length;
+  await ui.run('runIntegration("choose_workspace")');
+  assert.deepEqual(ui.calls.slice(before).map(call => call.command), ["choose_workspace", "runtime_status", "recent_logs"]);
+  assert.equal(ui.elements.get("#workspace-dir").textContent, "/fixture/project");
+  assert.equal(ui.run("operationInFlight"), false);
+});
+
 test("open folder reveals the effective workspace without changing it", async () => {
   const ui = setup({open_workspace_folder: () => null});
-  ui.run('renderIntegration({workspace_available:true, workspace_is_external:false});');
+  ui.run('renderIntegration({workspace_available:true, workspace_openable:true, workspace_is_external:false});');
   await ui.elements.get("#open-workspace-folder").listeners.click();
   assert.equal(ui.calls.filter(call => call.command === "open_workspace_folder").length, 1);
   assert.equal(ui.calls.filter(call => call.command === "choose_workspace").length, 0);
@@ -595,12 +660,21 @@ test("open folder reveals the effective workspace without changing it", async ()
   assert.equal(ui.elements.get("#open-workspace-folder").disabled, false);
 });
 
-test("an unavailable workspace keeps Open folder available for the error", async () => {
-  const ui = setup({open_workspace_folder: () => { throw new Error("workspace unavailable"); }});
-  ui.run('renderIntegration({workspace_available:false, workspace_issue:"Folder unavailable"});');
+test("Open folder stays disabled until the directory exists, without preventing first install", async () => {
+  const ui = setup();
+  ui.run('updateActionAvailability()');
+  assert.equal(ui.elements.get("#open-workspace-folder").disabled, true);
+  ui.run('renderIntegration({workspace_available:true, workspace_openable:false, workspace_is_external:false}); renderStatus({phase:"not_created"});');
+  assert.equal(ui.elements.get("#open-workspace-folder").disabled, true);
+  assert.equal(ui.elements.get("#start-runtime").disabled, false);
+  assert.match(ui.elements.get("#open-workspace-folder").title, /Start Universal Agents/);
   await ui.elements.get("#open-workspace-folder").listeners.click();
-  assert.match(ui.elements.get("#notice").textContent, /Download diagnostics/);
+  assert.equal(ui.calls.filter(call => call.command === "open_workspace_folder").length, 0);
+  ui.run('renderIntegration({workspace_available:true, workspace_openable:true, workspace_is_external:false}); renderStatus({phase:"stopped"});');
   assert.equal(ui.elements.get("#open-workspace-folder").disabled, false);
+  ui.run('renderIntegration({workspace_available:false, workspace_openable:false, workspace_is_external:true});');
+  assert.equal(ui.elements.get("#open-workspace-folder").disabled, true);
+  assert.match(ui.elements.get("#open-workspace-folder").title, /Restore it or choose/);
 });
 
 test("logs expand into a larger view and collapse again", async () => {

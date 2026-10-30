@@ -4,7 +4,10 @@
 use std::{
     io::{Read, Write},
     net::TcpListener,
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::{
+        OnceLock,
+        atomic::{AtomicUsize, Ordering},
+    },
     time::Duration,
 };
 use tauri::{Manager, Url};
@@ -15,7 +18,26 @@ const SAME_ORIGIN: usize = 1;
 const DEFERRED: usize = 2;
 const BROKER: usize = 4;
 const EXTERNAL: usize = 8;
-const ALL: usize = SAME_ORIGIN | DEFERRED | BROKER | EXTERNAL;
+const HTTP_DOWNLOAD: usize = 16;
+const BLOB_DOWNLOAD: usize = 32;
+const CANCEL_DOWNLOAD: usize = 64;
+const ALL: usize =
+    SAME_ORIGIN | DEFERRED | BROKER | EXTERNAL | HTTP_DOWNLOAD | BLOB_DOWNLOAD | CANCEL_DOWNLOAD;
+static DOWNLOAD_DIR: OnceLock<std::path::PathBuf> = OnceLock::new();
+
+fn save_download(name: &str) -> Option<std::path::PathBuf> {
+    match name {
+        "cancel.txt" => {
+            PASSED.fetch_or(CANCEL_DOWNLOAD, Ordering::SeqCst);
+            None
+        }
+        "instance_config.yaml" | "team.env" => Some(DOWNLOAD_DIR.get().unwrap().join(name)),
+        _ => {
+            eprintln!("FAIL: unexpected download filename");
+            None
+        }
+    }
+}
 /// The three links that load inside the app; the external one must not leave
 /// an empty window behind.
 const EXPECTED_PAGES: usize = 3;
@@ -47,8 +69,13 @@ fn serve(listener: TcpListener, respond: impl Fn(&str) -> String + Send + 'stati
             let request = String::from_utf8_lossy(&bytes[..size]);
             let path = request.split_whitespace().nth(1).unwrap_or("/");
             let body = respond(path);
+            let content_type = if path == "/download" {
+                "application/octet-stream\r\nContent-Disposition: attachment; filename=instance_config.yaml"
+            } else {
+                "text/html"
+            };
             let response = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                 body.len(),
                 body
             );
@@ -58,6 +85,9 @@ fn serve(listener: TcpListener, respond: impl Fn(&str) -> String + Send + 'stati
 }
 
 fn main() {
+    let download_dir = tempfile::tempdir().unwrap();
+    DOWNLOAD_DIR.set(download_dir.path().to_path_buf()).unwrap();
+    universal_agents_desktop_lib::webview::use_save_destination(save_download);
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let broker = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -79,7 +109,9 @@ fn main() {
     });
 
     serve(listener, move |path| {
-        if path.starts_with("/event") {
+        if path == "/download" {
+            "fixture: config\n".into()
+        } else if path.starts_with("/event") {
             println!("Popup event: {path}");
             "ok".into()
         } else if path.starts_with("/broker-result") {
@@ -136,6 +168,14 @@ fn main() {
               }}, 2500);
               setTimeout(() => clickBlank('http://127.0.0.1:{broker_port}/credential-collection/smoke'), 4000);
               setTimeout(() => clickBlank('{EXTERNAL_URL}'), 5500);
+              function download(href, name) {{
+                const link = document.createElement('a');
+                link.href = href; link.download = name;
+                document.body.append(link); link.click(); link.remove();
+              }}
+              setTimeout(() => download('/download', 'instance_config.yaml'), 7000);
+              setTimeout(() => download(URL.createObjectURL(new Blob(['FIXTURE=only\n'], {{type: 'text/plain'}})), 'team.env'), 9000);
+              setTimeout(() => download(URL.createObjectURL(new Blob(['cancel me'], {{type: 'text/plain'}})), 'cancel.txt'), 11000);
             }}, 800);
             </script>"#
             )
@@ -147,6 +187,7 @@ fn main() {
     context.config_mut().app.windows.clear();
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![runtime_status])
         .setup(move |app| {
             universal_agents_desktop_lib::webview::build_runtime_window(
@@ -159,6 +200,14 @@ fn main() {
             let handle = app.handle().clone();
             std::thread::spawn(move || {
                 for _ in 0..450 {
+                    for (name, expected, bit) in [
+                        ("instance_config.yaml", "fixture: config\n", HTTP_DOWNLOAD),
+                        ("team.env", "FIXTURE=only\n", BLOB_DOWNLOAD),
+                    ] {
+                        if std::fs::read_to_string(DOWNLOAD_DIR.get().unwrap().join(name)).ok().as_deref() == Some(expected) {
+                            PASSED.fetch_or(bit, Ordering::SeqCst);
+                        }
+                    }
                     if PASSED.load(Ordering::SeqCst) == ALL {
                         // Give the empty window from the external link time to close.
                         std::thread::sleep(Duration::from_millis(1500));
@@ -174,7 +223,7 @@ fn main() {
                             std::process::exit(1);
                         }
                         println!(
-                            "PASS: same-origin and deferred popups share cookies and deny desktop commands; the broker form opens in an app window; external links leave no empty window"
+                            "PASS: popups share cookies and deny desktop commands; broker and external links follow policy; HTTP and blob downloads save exact contents and cancellation is handled"
                         );
                         handle.exit(0);
                         return;

@@ -34,6 +34,10 @@ Configure a Docker credential helper before using the launcher's GitHub CLI or P
 
 ## End-to-end checklist
 
+Verify that cancelling **Choose folder** immediately restores the launcher controls, preserves the current workspace, and does not restart the runtime. Check the subscription picker the same way. After onboarding opens UA's Status page, return to the launcher and choose **Open in app**; it must open chat. Repeat from another `/webchat?view=...` page, then verify that opening an already-active chat preserves it without a reload.
+
+For first-install regressions, verify the progress row appears immediately, names the download stage and byte counts when available, and survives reloading the launcher during a pull. Confirm a failure stops the indicator and leaves an actionable error. In embedded setup, save both config files, check their exact names and contents, cancel a repeated download, and verify a rejected destination reports failure. Repeat in a child UA window. The `popup_smoke` example exercises native HTTP/blob downloads and cancellation automatically with synthetic files; it substitutes the destination picker, so the real save dialog still needs this manual check.
+
 For automated native launcher checks on Mac and Windows, follow [the UI test setup](../tests/ui/README.md). It records screenshots and tests the real bundled UI against a simulated runtime boundary. The checklist below covers the remaining real-host acceptance work.
 
 1. Install and open the launcher. Confirm the title intro and **Click to Begin**, the one-time background fill, the first-run note that agents need a computer that stays on (with this system's sleep setting; it must not show on the next launch), the dark default appearance and the sun/moon theme switch, both versions, collapsed image access, and header controls.

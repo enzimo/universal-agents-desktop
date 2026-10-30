@@ -135,6 +135,8 @@ let lastCheckedAt = null;
 let latestStatus = null;
 let latestIntegration = null;
 let operationInFlight = false;
+let startupFinished = false;
+let startupPollInFlight = false;
 let logsRefreshInFlight = false;
 let automaticImportAttempted = false;
 // Tooltips written in index.html. Some buttons swap them for the reason they
@@ -282,6 +284,48 @@ function setBusy(busy) {
   updateActionAvailability();
 }
 
+function renderOperationProgress(update) {
+  const bar = document.querySelector("#operation-bar");
+  document.querySelector("#operation-progress").hidden = false;
+  document.querySelector("#operation-detail").textContent = update.message;
+  bar.hidden = false;
+  if (Number.isFinite(update.current_bytes) && Number.isFinite(update.total_bytes) && update.total_bytes > 0) {
+    bar.max = update.total_bytes;
+    bar.value = Math.min(update.current_bytes, update.total_bytes);
+  } else {
+    bar.removeAttribute("value");
+    bar.removeAttribute("max");
+  }
+}
+
+// This command never waits for the Docker lock. A snapshot also covers updates
+// produced before the webview loaded, and reloading while a pull is in progress.
+async function refreshStartupProgress() {
+  if (startupFinished || startupPollInFlight) return;
+  startupPollInFlight = true;
+  try {
+    const startup = await invoke("startup_progress");
+    setBusy(startup.active);
+    renderOperationProgress(startup.update);
+    document.querySelector("#startup-note").hidden = !startup.active;
+    if (startup.active) {
+      elements.statusLabel.textContent = "Preparing UA…";
+      elements.statusPill.className = "status-text status-starting";
+      elements.statusDetail.textContent = startup.update.message;
+    } else {
+      startupFinished = true;
+      document.querySelector("#operation-bar").hidden = true;
+      // Refresh failure recovery controls before showing the startup error.
+      await refreshStatus({ quiet: true });
+      if (startup.error) showError(startup.error);
+    }
+  } catch (error) {
+    showError(error);
+  } finally {
+    startupPollInFlight = false;
+  }
+}
+
 // Subscribe before invoking so fast authentication/download transitions are not lost.
 // `onProgress` also receives each update, for progress shown elsewhere.
 async function invokeWithProgress(command, args, initialMessage, onProgress) {
@@ -299,14 +343,7 @@ async function invokeWithProgress(command, args, initialMessage, onProgress) {
       const update = typeof event.payload === "string"
         ? { message: event.payload }
         : event.payload;
-      detail.textContent = update.message;
-      if (Number.isFinite(update.current_bytes) && Number.isFinite(update.total_bytes) && update.total_bytes > 0) {
-        bar.max = update.total_bytes;
-        bar.value = Math.min(update.current_bytes, update.total_bytes);
-      } else {
-        bar.removeAttribute("value");
-        bar.removeAttribute("max");
-      }
+      renderOperationProgress(update);
       onProgress?.(update);
     });
     const status = await invoke(command, args);
@@ -448,12 +485,19 @@ function updateActionAvailability() {
     elements.chooseWorkspace,
     elements.connectSubscription,
     elements.downloadDiagnostics,
-    elements.openWorkspaceFolder,
     elements.refreshExternalSkills,
     elements.useInternalWorkspace,
   ]) {
     button.disabled = operationInFlight;
   }
+  elements.openWorkspaceFolder.disabled = operationInFlight || latestIntegration?.workspace_openable !== true;
+  elements.openWorkspaceFolder.title = latestIntegration === null
+    ? "Checking whether the workspace folder exists."
+    : latestIntegration.workspace_openable
+      ? "Show the shared folder in your file manager"
+      : latestIntegration.workspace_is_external
+        ? "The saved workspace folder is unavailable. Restore it or choose an existing folder."
+        : "Start Universal Agents to create the app workspace, or choose an existing folder.";
   // A check in progress would return an offer for the old choice.
   elements.offerUnlistedRuntimes.disabled = updateBusy || downloadingUpdate;
   // Quitting the host is always available; quitting by stopping first needs a
@@ -626,9 +670,13 @@ async function runLifecycle(command) {
 async function runIntegration(command) {
   clearError();
   setBusy(true);
-  if (command === "connect_openai_subscription") automaticImportAttempted = false;
   try {
-    renderIntegration(await invoke(command));
+    const integration = await invoke(command);
+    // Native pickers return null on cancellation. Nothing changed, so do not
+    // queue Docker probes or reset a pending credential import attempt.
+    if (integration === null) return;
+    if (command === "connect_openai_subscription") automaticImportAttempted = false;
+    renderIntegration(integration);
     renderStatus(await invoke("runtime_status"));
     await refreshLogs({ quiet: true });
   } catch (error) {
@@ -754,6 +802,7 @@ elements.openBrowser.addEventListener("click", async () => {
 
 elements.chooseWorkspace.addEventListener("click", () => runIntegration("choose_workspace"));
 elements.openWorkspaceFolder.addEventListener("click", async () => {
+  if (elements.openWorkspaceFolder.disabled) return;
   clearError();
   elements.openWorkspaceFolder.disabled = true;
   try {
@@ -925,9 +974,10 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
-Promise.all([refreshStatus(), loadAutostart(), refreshLogs({ quiet: true })]);
+Promise.all([refreshStartupProgress(), loadAutostart(), refreshLogs({ quiet: true })]);
 setInterval(() => {
   if (!document.hidden) {
+    refreshStartupProgress();
     refreshStatus({ quiet: true });
     refreshLogs({ quiet: true });
     if (updatesOpen()) renderCheckedTime();

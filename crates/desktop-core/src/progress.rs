@@ -1,6 +1,7 @@
 //! Operation-scoped progress, independent of the serialized controller mutex.
 //! Only fixed application messages belong here, never command output or credentials.
 use std::cell::RefCell;
+use std::sync::Mutex;
 
 use serde::Serialize;
 
@@ -9,6 +10,64 @@ pub struct ProgressUpdate {
     pub message: String,
     pub current_bytes: Option<u64>,
     pub total_bytes: Option<u64>,
+}
+
+/// Automatic startup must remain readable while Docker holds its lifecycle lock.
+/// Retain the latest update for launchers that load after installation begins.
+#[derive(Clone, Debug, Serialize)]
+pub struct StartupProgress {
+    pub active: bool,
+    pub update: ProgressUpdate,
+    pub error: Option<String>,
+}
+
+pub struct StartupTracker(Mutex<StartupProgress>);
+
+impl Default for StartupTracker {
+    fn default() -> Self {
+        Self(Mutex::new(StartupProgress {
+            active: true,
+            update: ProgressUpdate {
+                message: "Preparing Universal Agents. Checking Docker and the installed runtime…"
+                    .into(),
+                current_bytes: None,
+                total_bytes: None,
+            },
+            error: None,
+        }))
+    }
+}
+
+impl StartupTracker {
+    pub fn snapshot(&self) -> StartupProgress {
+        self.0
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .clone()
+    }
+
+    pub fn report(&self, update: ProgressUpdate) {
+        self.0
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .update = update;
+    }
+
+    pub fn finish(&self, result: Result<String, String>) {
+        let mut state = self.0.lock().unwrap_or_else(|error| error.into_inner());
+        state.active = false;
+        state.update.current_bytes = None;
+        state.update.total_bytes = None;
+        match result {
+            Ok(message) => state.update.message = message,
+            Err(error) => {
+                state.update.message =
+                    "Universal Agents could not start. See the error below for the next step."
+                        .into();
+                state.error = Some(error);
+            }
+        }
+    }
 }
 
 type Reporter = Box<dyn Fn(ProgressUpdate)>;
@@ -70,6 +129,39 @@ pub fn with_reporter<T>(
 mod tests {
     use super::*;
     use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn startup_snapshot_retains_download_for_late_readers_and_finishes() {
+        let tracker = Arc::new(StartupTracker::default());
+        let worker = tracker.clone();
+        std::thread::spawn(move || {
+            with_reporter(
+                move |update| worker.report(update),
+                || report_download(42, 100),
+            );
+        })
+        .join()
+        .unwrap();
+        let snapshot = tracker.snapshot();
+        assert!(snapshot.active);
+        assert_eq!(snapshot.update.current_bytes, Some(42));
+        assert_eq!(snapshot.update.total_bytes, Some(100));
+        tracker.finish(Ok("Setup ready".into()));
+        let snapshot = tracker.snapshot();
+        assert!(!snapshot.active);
+        assert_eq!(snapshot.update.message, "Setup ready");
+        assert_eq!(snapshot.update.current_bytes, None);
+        assert!(snapshot.error.is_none());
+    }
+
+    #[test]
+    fn startup_failure_remains_available_after_worker_exits() {
+        let tracker = StartupTracker::default();
+        tracker.finish(Err("test startup failure".into()));
+        let snapshot = tracker.snapshot();
+        assert!(!snapshot.active);
+        assert_eq!(snapshot.error.as_deref(), Some("test startup failure"));
+    }
 
     #[test]
     fn reporter_is_scoped_to_worker_and_removed_after_panic() {

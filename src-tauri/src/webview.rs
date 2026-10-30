@@ -5,7 +5,15 @@ use std::sync::{
 use tauri::{AppHandle, Manager, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_opener::OpenerExt;
 
+pub use crate::downloads::use_save_destination;
+
 static NEXT_PAGE: AtomicU64 = AtomicU64::new(1);
+
+/// UA selects subpages with query parameters, such as /webchat?view=status.
+/// Explicitly opening chat must reset those views even when the path matches.
+pub fn needs_navigation(current: &Url, target: &Url) -> bool {
+    current != target
+}
 
 /// Replaces the system browser for links that leave the app. Only the native
 /// popup probe sets this, so it can check external links without opening a
@@ -39,10 +47,16 @@ fn is_blank(url: &Url) -> bool {
     url.as_str() == "about:blank"
 }
 
+fn is_runtime_download(url: &Url, ports: RuntimePorts) -> bool {
+    is_runtime(url, ports.web)
+        || (url.scheme() == "blob"
+            && Url::parse(url.path()).is_ok_and(|origin| is_runtime(&origin, ports.web)))
+}
+
 /// Whether `url` may load inside an app window. `child` is true for windows
 /// a UA page opened, false for the main Web UI window.
 fn loads_in_app(url: &Url, ports: RuntimePorts, child: bool) -> bool {
-    is_runtime(url, ports.web) || is_blank(url) || (child && is_runtime(url, ports.broker))
+    is_runtime_download(url, ports) || is_blank(url) || (child && is_runtime(url, ports.broker))
 }
 
 fn open_external(app: &AppHandle, url: &Url) {
@@ -92,6 +106,7 @@ fn build_page(
     // (popup-links.js, deferred login windows). If that first navigation
     // leaves the app, the empty window would stay on screen, so it is closed.
     let loaded = AtomicBool::new(!is_blank(&target));
+    let downloads = crate::downloads::Downloads::default();
     // Start each page at its requested URL, including deferred about:blank pages.
     // window_features preserves the opener's WebView2 environment, WebKitGTK
     // related view, or WKWebView configuration, depending on the host OS.
@@ -129,6 +144,18 @@ fn build_page(
                 tauri::webview::NewWindowResponse::Deny
             }
         });
+    // WebKitGTK registers download callbacks on the shared web context, so
+    // the main window's handler also handles its children. Registering it on
+    // every child would process each download several times.
+    if !cfg!(target_os = "linux") || !child {
+        builder = builder.on_download(move |view, event| {
+            if matches!(&event, tauri::webview::DownloadEvent::Requested { url, .. } if !is_runtime_download(url, ports)) {
+                log::warn!("blocked download outside the runtime origin");
+                return false;
+            }
+            downloads.handle(view.app_handle(), event)
+        });
+    }
     if let Some(features) = features {
         builder = builder.window_features(features);
     }
@@ -166,6 +193,52 @@ fn close_empty_page(app: &AppHandle, label: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn reopening_chat_resets_subpages_but_preserves_the_current_chat() {
+        let target = Url::parse("http://127.0.0.1:18090/webchat").unwrap();
+        assert!(!needs_navigation(&target, &target));
+        for current in [
+            "http://127.0.0.1:18090/webchat?view=status",
+            "http://127.0.0.1:18090/webchat?view=files",
+            "http://127.0.0.1:18090/webchat#status",
+            "http://127.0.0.1:18090/",
+            "http://127.0.0.1:18091/webchat",
+        ] {
+            assert!(
+                needs_navigation(&Url::parse(current).unwrap(), &target),
+                "{current}"
+            );
+        }
+    }
+    #[test]
+    fn downloads_allow_only_runtime_http_and_runtime_created_blobs() {
+        let ports = RuntimePorts {
+            web: 18090,
+            broker: 18600,
+        };
+        for url in [
+            "http://127.0.0.1:18090/config",
+            "blob:http://127.0.0.1:18090/id",
+        ] {
+            assert!(
+                is_runtime_download(&Url::parse(url).unwrap(), ports),
+                "{url}"
+            );
+        }
+        for url in [
+            "blob:https://example.com/id",
+            "blob:null/id",
+            "blob:http://127.0.0.1:18600/id",
+            "http://127.0.0.1:18600/config",
+            "file:///tmp/config",
+            "data:text/plain,config",
+        ] {
+            assert!(
+                !is_runtime_download(&Url::parse(url).unwrap(), ports),
+                "{url}"
+            );
+        }
+    }
     #[test]
     fn remote_pages_are_limited_to_the_exact_runtime_origin() {
         for url in [

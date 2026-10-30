@@ -76,9 +76,10 @@
 
       <!-- One progress row for installs, sign-in, restarts and updates, so the
            header buttons never move. -->
-      <div id="operation-progress" class="operation-progress" hidden>
+      <div id="operation-progress" class="operation-progress">
         <progress id="operation-bar" aria-label="Runtime operation progress"></progress>
-        <p id="operation-detail" role="status" aria-live="polite"></p>
+        <p id="operation-detail" role="status" aria-live="polite">Preparing Universal Agents. Checking Docker and the installed runtime…</p>
+        <p id="startup-note">On the first launch, the app downloads and installs Universal Agents. This can take several minutes. Keep this window open; setup will be available when it finishes.</p>
       </div>
 
       <div id="docker-banner" class="banner banner-warning" role="status" aria-live="polite" hidden>
@@ -129,8 +130,8 @@
             title="Choose the folder agents use as the team's shared folder. Universal Agents restarts to use it.">
             Choose folder
           </button>
-          <button id="open-workspace-folder" class="button button-quiet" type="button"
-            title="Show the shared folder in your file manager">
+          <button id="open-workspace-folder" class="button button-quiet" type="button" disabled
+            title="Checking whether the workspace folder exists.">
             Open folder
           </button>
           <button id="use-internal-workspace" class="button button-quiet" type="button" hidden

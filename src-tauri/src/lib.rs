@@ -1,4 +1,5 @@
 mod controller;
+mod downloads;
 pub mod webview;
 mod window_size;
 
@@ -18,6 +19,12 @@ const WEBCHAT_WINDOW: &str = "webchat";
 
 struct AppState {
     controller: Arc<DesktopController>,
+    startup: Arc<ua_desktop_core::progress::StartupTracker>,
+}
+
+#[tauri::command]
+fn startup_progress(state: State<'_, AppState>) -> ua_desktop_core::progress::StartupProgress {
+    state.startup.snapshot()
 }
 
 #[tauri::command]
@@ -283,18 +290,18 @@ async fn set_external_skill_refresh(
 async fn choose_workspace(
     app: AppHandle,
     state: State<'_, AppState>,
-) -> Result<IntegrationStatus, String> {
+) -> Result<Option<IntegrationStatus>, String> {
     let selected = app
         .dialog()
         .file()
         .set_title("Choose an agent workspace")
         .blocking_pick_folder();
     let Some(selected) = selected else {
-        return state.controller.integration_status();
+        return Ok(None);
     };
     let path = selected.into_path().map_err(|error| error.to_string())?;
     let controller = Arc::clone(&state.controller);
-    run_blocking(move || controller.select_workspace(path)).await
+    run_blocking(move || controller.select_workspace(path).map(Some)).await
 }
 
 #[tauri::command]
@@ -307,7 +314,7 @@ async fn use_internal_workspace(state: State<'_, AppState>) -> Result<Integratio
 async fn connect_openai_subscription(
     app: AppHandle,
     state: State<'_, AppState>,
-) -> Result<IntegrationStatus, String> {
+) -> Result<Option<IntegrationStatus>, String> {
     let mut dialog = app
         .dialog()
         .file()
@@ -320,11 +327,11 @@ async fn connect_openai_subscription(
         }
     }
     let Some(selected) = dialog.blocking_pick_file() else {
-        return state.controller.integration_status();
+        return Ok(None);
     };
     let auth_file = selected.into_path().map_err(|error| error.to_string())?;
     let controller = Arc::clone(&state.controller);
-    run_blocking(move || controller.connect_openai_subscription(auth_file)).await
+    run_blocking(move || controller.connect_openai_subscription(auth_file).map(Some)).await
 }
 
 #[tauri::command]
@@ -427,9 +434,8 @@ async fn open_workspace_folder(app: AppHandle, state: State<'_, AppState>) -> Re
     let controller = Arc::clone(&state.controller);
     let workspace = run_blocking(move || controller.workspace_dir()).await?;
     if !workspace.is_dir() {
-        return Err(format!(
-            "The agent workspace folder is not available yet: {}. Start Universal Agents so it can create the app workspace, or choose an existing folder.",
-            workspace.display()
+        return Err(guidance::guidance(
+            "The agent workspace folder is not available yet. Start Universal Agents so it can create the app workspace, or choose an existing folder.",
         ));
     }
     app.opener()
@@ -531,7 +537,7 @@ where
 fn show_webchat(app: &AppHandle, url: String, broker_port: u16) -> Result<(), String> {
     let target = Url::parse(&url).map_err(|e| e.to_string())?;
     if let Some(window) = app.get_webview_window(WEBCHAT_WINDOW) {
-        if window.url().map_err(|e| e.to_string())?.path() != target.path() {
+        if webview::needs_navigation(&window.url().map_err(|e| e.to_string())?, &target) {
             window.navigate(target).map_err(|e| e.to_string())?;
         }
         window.show().map_err(|error| error.to_string())?;
@@ -571,16 +577,28 @@ fn show_control<R: Runtime>(app: &AppHandle<R>) {
 
 fn start_in_background(app: &AppHandle) {
     let controller = Arc::clone(&app.state::<AppState>().controller);
+    let startup = Arc::clone(&app.state::<AppState>().startup);
     tauri::async_runtime::spawn(async move {
-        match tauri::async_runtime::spawn_blocking(move || controller.start_runtime()).await {
-            Ok(Ok(status)) => {
+        let reporter = Arc::clone(&startup);
+        let result = run_blocking(move || {
+            ua_desktop_core::progress::with_reporter(
+                move |update| reporter.report(update),
+                || controller.start_runtime(),
+            )
+        })
+        .await;
+        match result {
+            Ok(status) => {
                 log::info!("startup runtime check finished: {:?}", status.phase);
+                startup.finish(Ok(status.detail));
             }
-            Ok(Err(error)) => log::warn!(
-                "automatic runtime start failed: {}",
-                guidance::plain(&error)
-            ),
-            Err(error) => log::error!("automatic runtime worker failed: {error}"),
+            Err(error) => {
+                log::warn!(
+                    "automatic runtime start failed: {}",
+                    guidance::plain(&error)
+                );
+                startup.finish(Err(error));
+            }
         }
     });
 }
@@ -715,6 +733,7 @@ fn start_desktop(
     )?;
     app.manage(AppState {
         controller: Arc::new(controller),
+        startup: Arc::default(),
     });
 
     let control = app
@@ -803,6 +822,7 @@ pub fn run() {
             open_docs_browser,
             open_docker_help,
             open_workspace_folder,
+            startup_progress,
             quit_desktop_app,
             stop_runtime_and_quit,
             autostart_status,

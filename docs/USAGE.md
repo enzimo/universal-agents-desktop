@@ -6,6 +6,12 @@ Start with [Quickstart](../QUICKSTART.md) or download the [HTML setup guide](htt
 
 The app runs Universal Agents on this computer, and agents only work while it is awake: while it sleeps they stop, and scheduled tasks can run late or be missed. The first time the launcher opens, after **Click to Begin**, a note says this and names the sleep setting to change on your system. Choose **Got it** to close it; it does not show again on this computer. If you are comfortable with Docker, **Open setup guide** explains how to run UA on a server instead and use it from your browser.
 
+## Startup and setup downloads
+
+When the launcher opens, it checks Docker and starts UA automatically. The full-width progress row shows the current stage. The first launch downloads the runtime and can take several minutes; downloaded and total sizes appear when Docker provides them. Keep the launcher open until it says **Setup ready**. If startup fails, the error remains visible and you can correct the cause and retry with **Install & start** or **Start**.
+
+Inside **Open in app**, configuration downloads open a native save dialog once the file has downloaded. Choose where to save `instance_config.yaml` and `team.env`, or cancel to discard the download. Treat `team.env` as private because it can contain credentials. A failed download or save shows an error; you can retry or use **Open in browser**.
+
 ## Choose an agent workspace
 
 In the Status window, choose **Choose folder** under **Agent workspace** and select the project directory agents may read and change. The app mounts that folder read/write as UA's shared team folder, `team/team-shared` (`/data/workspaces/team/team-shared` inside the container). UA tells agents to use that folder when people and agents work on the same files, and everyone on your UA team can use it. Each person's private agent folder stays in app data. The app does not grant access to other personal folders.
@@ -47,6 +53,10 @@ The source file is mounted read-only in a network-disabled, one-shot helper cont
 Closing the window leaves the desktop host in the menu bar. Stopping the runtime is explicit. **Close** (in the header, next to Stop) quits the launcher without stopping the container; **Quit** stops the runtime and quits the launcher in one step. The tray menu's **Quit Desktop App** and **Stop UA and Quit** do the same. Both preserve your workspace and persistent data.
 
 **Open folder** under Agent workspace reveals the folder agents are currently using in your file manager. It does not change the selection.
+
+The app-managed workspace does not exist until UA first creates it. **Open folder** is greyed out until the effective workspace exists; its tooltip explains how to create or restore it. It becomes available automatically once the folder exists, even while UA is stopped. Cancelling **Choose folder** keeps the current workspace and performs no follow-up runtime checks.
+
+UA can open its own **Status** page after onboarding. Choose **Open in app** in the launcher to return that window to chat. This also recovers from other UA subpages; if chat is already open, the launcher focuses it without reloading.
 
 ## Refresh external skills on start
 

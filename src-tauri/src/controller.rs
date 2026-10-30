@@ -41,6 +41,7 @@ pub struct IntegrationStatus {
     pub workspace_dir: String,
     pub workspace_is_external: bool,
     pub workspace_available: bool,
+    pub workspace_openable: bool,
     pub workspace_issue: Option<String>,
     pub openai_subscription_state: OpenAiSubscriptionState,
     pub openai_subscription_detail: String,
@@ -598,6 +599,9 @@ fn integration_status(state: &ControllerState, data_dir: &Path) -> IntegrationSt
         workspace_dir: workspace.display().to_string(),
         workspace_is_external: state.settings.external_workspace.is_some(),
         workspace_available: workspace_issue.is_none(),
+        // Start may use the app-managed folder before UA creates it, but
+        // opening the folder requires a directory that already exists.
+        workspace_openable: workspace_issue.is_none() && workspace.is_dir(),
         workspace_issue,
         openai_subscription_state: subscription_state,
         openai_subscription_detail: subscription_detail,
@@ -632,13 +636,13 @@ fn holds_no_files(directory: &Path) -> Result<bool, String> {
 
 fn runtime_status(state: &ControllerState, data_dir: &Path) -> Result<RuntimeStatus, String> {
     let mut status = state.manager.status().map_err(error_text)?;
-    if !matches!(status.phase, RuntimePhase::DockerUnavailable) {
-        if let Some(issue) = workspace_issue(&state.settings, data_dir) {
-            status.phase = RuntimePhase::Error;
-            status.detail = format!(
-                "The saved agent workspace is unavailable. Choose a replacement folder or use the app workspace. {issue}"
-            );
-        }
+    if let Some(issue) = workspace_issue(&state.settings, data_dir)
+        .filter(|_| !matches!(status.phase, RuntimePhase::DockerUnavailable))
+    {
+        status.phase = RuntimePhase::Error;
+        status.detail = format!(
+            "The saved agent workspace is unavailable. Choose a replacement folder or use the app workspace. {issue}"
+        );
     }
     Ok(status)
 }
@@ -886,6 +890,14 @@ mod tests {
             controller.workspace_dir().unwrap(),
             data_dir.join("workspaces").join("team").join("team-shared")
         );
+        let status = controller.integration_status().unwrap();
+        assert!(status.workspace_available);
+        assert!(!status.workspace_openable);
+        let default_workspace = controller.workspace_dir().unwrap();
+        fs::create_dir_all(&default_workspace).unwrap();
+        assert!(controller.integration_status().unwrap().workspace_openable);
+        fs::remove_dir(&default_workspace).unwrap();
+        assert!(!controller.integration_status().unwrap().workspace_openable);
 
         // A saved folder becomes the folder the Open folder action reveals.
         // Settings are written directly so this test needs no Docker.
@@ -904,6 +916,9 @@ mod tests {
             DesktopController::new(runtime_lock(), data_dir, store.path().to_owned()).unwrap();
 
         assert_eq!(controller.workspace_dir().unwrap(), workspace);
+        assert!(controller.integration_status().unwrap().workspace_openable);
+        fs::remove_dir(workspace).unwrap();
+        assert!(!controller.integration_status().unwrap().workspace_openable);
     }
 
     #[test]

@@ -1,6 +1,6 @@
 # Update center (redesign concept D), phase 1
 
-Status: phase 1 implemented on branch `feat/update-center` (approved 2026-10-14). Mockup: `mockups/d-update-center.html`.
+Status: phase 1 implemented, originally approved 2026-10-14. Layout and interaction notes refreshed 2026-10-30 against the bundled launcher and [desktop design contract](../../ui/DESIGN.md). The [concept D mockup](mockups/d-update-center.html) records the original proposal; use the design contract for the current UI.
 
 Changes from the proposal, made during implementation:
 - Newer rows under Other versions have **Choose** only, not Download and Choose. Choosing makes the version the lane's target and its Download step then fetches it; a separate per-row Download would have silently changed the target too.
@@ -21,7 +21,7 @@ Make updates something the person drives, with no dead ends:
 
 ## Decisions already made
 
-- Layout: concept D (home stays about the team; an **Updates** drawer holds all versions). Concept B is the likely next step if the launcher grows.
+- Layout: concept D, with the current home layout described below. An **Updates** drawer holds version review and update actions. The other mockups remain design alternatives, not approved next steps.
 - UA versions: **newer only.** Older versions are listed for reference without Download or Switch, because UA has no guard against an older version opening data a newer one changed.
 - Launcher self-update: **notify now, install later.** Phase 1 shows the newer launcher and opens its GitHub release page. Phase 2 (separate plan) adds in-app download and install with Tauri's updater.
 
@@ -29,15 +29,20 @@ Make updates something the person drives, with no dead ends:
 
 ### Header (one row)
 
-Brand and version chips (`Launcher 0.5.0`, `UA 0.9.2`) on the left. On the right, all 38 px high and vertically centred: **Updates** with a count, one Start / Restart / Stop group, the status pill, the theme switch. The operation progress bar and its result text move to a full-width row under the header, so the buttons never shift.
+On the left: the project mark, **Universal Agents Launcher** with its runtime state immediately after the title, and the independent Launcher and UA version chips below. On the right, all 38 px high and vertically centred: **Updates** with a count, one joined Start / Restart / Stop group, a joined **Close** / **Quit** group, and the sun/moon theme switch. Controls wrap together on narrow windows.
 
-The duplicate Start / Restart / Stop buttons in the lower pane go away.
+The operation progress bar and its result text occupy a full-width row under the header. The first automatic startup also uses this row, with stage messages, download sizes when available, and a reminder that the first installation can take several minutes. Native verification follows the [platform acceptance checklist](../../docs/PLATFORM_TESTING.md).
+
+There are no duplicate lifecycle buttons below the header. **Close** exits the launcher and leaves UA running; **Quit** stops UA before exiting and stays unavailable when UA is not running.
 
 ### Home
 
-- Left: status, explanation, **Open in app**, **Open in browser**, **Read The Docs** (unchanged).
-- Right: recent runtime logs (moved up from the lower row).
-- Below, unchanged in content: private image access, Access (workspace and OpenAI subscription), then a **Settings** pane with the runtime facts and the two switches (start at login, refresh skills), then the footer.
+- Left: the launch pane with its explanation, **Open in app**, **Open in browser**, and **Read The Docs**. The two open actions become available when UA is ready for setup or running.
+- Right: **Agent Workspace**, showing the effective host folder, whether it is app-managed or selected, and the folder controls. These panes stack below 850 px.
+- **Advanced Settings** follows, with **Private Image Access** and **OpenAI Subscription (optional)** side by side, then **Recent Runtime Logs** across the full width. All three sections start collapsed. An unavailable saved subscription source opens its section for recovery.
+- **Controls** is the last pane and starts expanded. It contains runtime facts, the web address, data folder, start-at-login and refresh-skills switches. There is no footer or manual status-refresh button.
+
+The title intro appears before the launcher. On first use, the notice about keeping the computer awake follows it, then the Docker prerequisite dialog if needed. These dialogs keep the launcher and update actions out of reach until dismissed.
 
 ### Updates drawer
 
@@ -46,16 +51,16 @@ Opens from the header **Updates** button, the floating badge, or a "downloaded" 
 Top: "Checked N minutes ago" and **Check now**.
 
 **Desktop launcher lane**
-1. *Found launcher 0.5.5*: release date, **What's new** (opens the release page).
-2. *Download and install*: **Open download page** opens `https://github.com/enzimo/universal-agents-desktop/releases/tag/v0.5.5` in the browser.
+1. *Found launcher X*: release date.
+2. *Download and install*: **Open download page** opens the release page returned by the last check in the browser.
 3. *Reopen the launcher*: "UA keeps running while you install."
 
-When the launcher is current: "Launcher 0.5.5 is up to date."
+When the launcher is current: "Launcher X is up to date." A failed launcher check reports its own error without blocking the UA lane.
 
 **Universal Agents lane** (target = recommended version, or the newer version the person picked)
-1. *Found UA 0.9.3*: date; ✓ works with this launcher, or the amber unchecked warning.
+1. *Found UA X*, or *Chose UA X*: date and **Works with this launcher**, or the unchecked warning.
 2. *Download*: **Download** button, then a percentage, then "Downloaded". It never restarts UA.
-3. *Review the notes*: every release between the running version and the target, breaking-change headings highlighted, the acknowledgment switch. (Implemented with the notes collapsed by default.)
+3. *Review the notes*: every release between the running version and the target as selectable plain text, breaking-change headings called out in the warning, and an acknowledgment switch. Notes start collapsed for each new review.
 4. *Switch*: **Switch and restart**. It restarts UA, interrupting work; data stays.
 
 Special states shown in the lane instead of the steps:
@@ -73,20 +78,22 @@ The last five versions for this launcher, newest first, always including the run
 
 Newer rows have **Choose**, which makes that version the lane's target. Older rows only say "Older than the running version" and link to their notes.
 
-The **Offer pre-release and unchecked versions** switch moves here.
+The **Offer pre-release and unchecked versions** switch is the final row, off by default. Changing it rechecks available versions. Choosing is disabled during a check, download, or other operation; older versions offer only **Notes**.
 
 ### Floating badge
 
-It replaces today's floating button and green banner. It shows the single most useful item and stays until that item is resolved. Clicking it opens the drawer. In priority order:
+The bottom-right badge briefly shows the single most useful update item. Clicking it opens the drawer. In priority order:
 
 1. UA downloading, with a percentage ring;
 2. UA downloaded, "Review and switch";
 3. UA newer version available;
 4. launcher newer version available.
 
-Docker missing hides it, as today.
+It hides after five seconds, on dismissal, or when the drawer opens. The timer pauses while the pointer or keyboard focus is inside the badge. It reappears only when the update reaches its next stage, not after an unchanged recheck. The header count remains available after the badge hides.
 
-## Backend changes
+The badge also stays hidden while Docker is unavailable, during the intro or first-run notice, and while the Updates drawer is open.
+
+## Implemented backend changes
 
 `crates/desktop-core/src/updates.rs`:
 
@@ -101,8 +108,8 @@ Docker missing hides it, as today.
 
 `src-tauri/src/controller.rs` and `lib.rs`:
 - `check_runtime_updates` fills `downloaded` for each catalog entry with `image_present`, which is Docker only, never a pull.
-- New command `review_runtime_version(version)` stores and returns the review for that target. `download_runtime_update` and `install_runtime_update` keep taking a review id, unchanged.
-- New command `open_release_page(product, version)` opens only `https://github.com/enzimo/universal-agents-desktop/releases/tag/v{version}` for the launcher version the last check returned, or the notes page of a UA version in the last check.
+- `review_runtime_version(version)` stores and returns the review for that target. `download_runtime_update` and `install_runtime_update` take a review id.
+- `open_release_page(product, version)` opens the launcher release page or a UA notes page from the last check. It accepts no arbitrary URL.
 - Both commands are added to `permissions/runtime-control.toml`.
 
 Unchanged:
@@ -112,7 +119,7 @@ Unchanged:
 - a pending update retries through Start;
 - first install picks the newest listed version.
 
-## Frontend changes (`ui/desktop-shell`)
+## Implemented frontend changes (`ui/desktop-shell`)
 
 - `index.html`: new header row and progress row, drawer and badge markup. Removed: the updates pane, the lower lifecycle buttons, the update banner and the old floating button.
 - `app.js`: `renderUpdateCenter(review)` draws the lanes, steps, catalog rows and badge, and computes the header count. The existing download and install flows feed it. The drawer focus handling and Escape behave like the Docker dialog.
@@ -138,16 +145,16 @@ Unchanged:
 - `ui/desktop-shell/app.test.cjs`:
   - lane and step rendering for none, available, downloading, downloaded, pending, blocked and unchecked;
   - header count and badge priority;
-  - older rows have no actions;
+  - older rows offer Notes but no Choose, Download, or Switch action;
   - drawer open and close with focus return;
   - lifecycle gates on the single header group.
 - `src-tauri/examples/ui_driver.rs` fake backend: new response shapes. `tests/ui/launcher.mjs` native suite on macOS and Windows: open the drawer, both lanes, choose a newer version, switch toggle, Escape.
-- Manual on the user's Mac with real UA: check, download 0.9.3, review, switch; the launcher lane links to the 0.5.5 release.
+- Manual on each supported platform with real UA: check for an available newer listed version, download it without restarting, review the notes, then switch. Confirm the launcher lane opens its reviewed release page. Use disposable test data when a real runtime switch is needed. The checks above describe required coverage, not a claim that native validation has run for the current working changes.
 
 ## Phase 2 (separate plan, later)
 
 In-app launcher download and install with `tauri-plugin-updater`:
 - an update-signing key pair, with the private key as a GitHub secret;
 - CI builds updater artifacts and `latest.json`;
-- downloads from the private repository through the person's GitHub CLI login;
-- the badge's Ready state becomes **Restart launcher**.
+- public installer downloads remain available without a GitHub account; decide any restricted-repository authentication separately;
+- decide the install-complete message and **Restart launcher** action in that future design, including how they interact with the badge's five-second dismissal.
