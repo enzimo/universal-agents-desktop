@@ -1,5 +1,13 @@
 # Gotchas
 
+- WebView2 can suppress successive timer-triggered downloads after the first file, before the native download callback runs. Setting `Runtime.evaluate`'s `userGesture` flag alone did not reset this limit in the Windows probe. The probe locates visible buttons and sends mouse press/release events through test-only DevTools calls. Do not grant automatic-download permission in the shipping app just to make a timer-driven probe pass.
+
+- UA's Status, Files, and other views share `/webchat` and select their page through `?view=...`. Comparing only URL paths when reusing the main window leaves **Open in app** stuck on those views. Compare the full launch URL, including query and fragment, while avoiding a reload when it already matches.
+- Native picker cancellation must return an explicit no-change result. Returning integration status on cancellation made the renderer run Docker status and log checks while controls stayed disabled, which looked like a restart even though no lifecycle operation occurred. The workspace and subscription pickers return `null` on cancellation; the renderer skips those checks and preserves import-attempt state.
+
+- Automatic startup holds the Docker controller lock while downloading. Reporting its progress through normal status calls leaves the launcher on "Checking" until installation finishes. Retain startup progress outside that lock; a listener alone also misses stages emitted before the launcher loads.
+- Embedded configuration downloads need native download handling and permission for runtime-created blob URLs to reach it. Keep save dialogs asynchronous: waiting for a dialog inside the WebView2 download callback can block the Windows message thread. WebKitGTK refuses an existing destination file, so stage into a new path in a private directory. Its callback can return a file URL; macOS omits the completion path. The native popup probe covers HTTP and blob file contents and cancellation without granting hosted pages desktop commands.
+
 - GitHub repository and release visibility does not set GHCR container-package visibility. Check the package setting and an anonymous image request before documenting a setup without registry sign-in. The current app's in-app update checker separately uses signed-in GitHub CLI, including for public repositories.
 - Public documentation uses a dedicated hosted workflow; native CI accepts only approved repositories and same-repository PRs through installed host hooks. Its hosted workflow publishes the existing guides through MkDocs; the lowercase URL mapping belongs in `scripts/docs_site.py`, while Markdown links keep the original source paths. Keep strict link checks and the project-path HTTP tests enabled so missing setup-guide links or root-relative assets cannot silently reach Pages.
 - A Docker image digest and a UA semantic version are related but not interchangeable. Execution trusts the digest; UI and release notes show the version.
@@ -41,6 +49,13 @@
 - Key-based Windows SSH sessions cannot necessarily unlock Docker Desktop or GitHub CLI credential storage. A failed credential lookup over SSH does not prove the desktop account is signed out. Run authenticated builds and GUI tests under the signed-in account through its foreground runner or an interactive scheduled task. Keep tokens out of command arguments and build logs.
 
 ## Self-hosted Windows script policy
+
+GitHub event JSON is UTF-8, including PR titles and descriptions. Installed
+runner hooks must read it with `encoding="utf-8"`; a Windows legacy default
+such as CP1252 can reject smart quotes before checkout or tests begin. Updating
+the repository copy alone does not update the installed hook. After moving a
+runner, also verify that its installed hook's runner and work paths match the
+active runner before allowing cleanup of the new directory.
 
 Windows PowerShell may default to Restricted execution policy even when the runner starts successfully. The manual Windows workflow uses `-ExecutionPolicy Bypass` for its own PowerShell process so GitHub's generated step scripts can run. It retains terminating-error behavior and explicit native exit-code checks, and does not change the machine or user execution policy.
 

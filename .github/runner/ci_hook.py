@@ -183,7 +183,7 @@ def begin(config: dict) -> None:
     state = Path(config["state"])
     state.mkdir(parents=True, exist_ok=True)
     cleanup(config, before_job=True)
-    event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
+    event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
     require_trusted_event(config, os.environ, event)
     repository = os.environ["GITHUB_REPOSITORY"]
     workspace = child(Path(os.environ["GITHUB_WORKSPACE"]), Path(config["work"]))

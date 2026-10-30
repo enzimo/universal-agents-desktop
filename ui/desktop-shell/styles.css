@@ -1225,9 +1225,11 @@ input[role="switch"]:disabled {
 
 .operation-progress p {
   margin: 6px 0 0;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1.5;
 }
+
+#operation-detail { font-weight: 600; }
 
 .operation-progress[hidden],
 .operation-progress progress[hidden] {

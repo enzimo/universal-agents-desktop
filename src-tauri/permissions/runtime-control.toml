@@ -5,6 +5,7 @@ commands.allow = [
   "registry_access",
   "begin_github_login",
   "runtime_status",
+  "startup_progress",
   "desktop_version",
   "keep_awake_hint",
   "check_runtime_updates",

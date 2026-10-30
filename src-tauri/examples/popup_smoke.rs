@@ -4,7 +4,10 @@
 use std::{
     io::{Read, Write},
     net::TcpListener,
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::{
+        OnceLock,
+        atomic::{AtomicUsize, Ordering},
+    },
     time::Duration,
 };
 use tauri::{Manager, Url};
@@ -15,13 +18,91 @@ const SAME_ORIGIN: usize = 1;
 const DEFERRED: usize = 2;
 const BROKER: usize = 4;
 const EXTERNAL: usize = 8;
-const ALL: usize = SAME_ORIGIN | DEFERRED | BROKER | EXTERNAL;
+const HTTP_DOWNLOAD: usize = 16;
+const BLOB_DOWNLOAD: usize = 32;
+const CANCEL_DOWNLOAD: usize = 64;
+const ALL: usize =
+    SAME_ORIGIN | DEFERRED | BROKER | EXTERNAL | HTTP_DOWNLOAD | BLOB_DOWNLOAD | CANCEL_DOWNLOAD;
+static DOWNLOAD_DIR: OnceLock<std::path::PathBuf> = OnceLock::new();
+
+fn save_download(name: &str) -> Option<std::path::PathBuf> {
+    println!("Popup event: save requested for {name}");
+    match name {
+        "cancel.txt" => {
+            PASSED.fetch_or(CANCEL_DOWNLOAD, Ordering::SeqCst);
+            None
+        }
+        "instance_config.yaml" | "team.env" => Some(DOWNLOAD_DIR.get().unwrap().join(name)),
+        _ => {
+            eprintln!("FAIL: unexpected download filename");
+            None
+        }
+    }
+}
 /// The three links that load inside the app; the external one must not leave
 /// an empty window behind.
 const EXPECTED_PAGES: usize = 3;
 const EXTERNAL_URL: &str = "https://example.invalid/external";
 
 static PASSED: AtomicUsize = AtomicUsize::new(0);
+
+/// WebView2 limits successive automatic downloads without a user gesture.
+/// Send mouse input to each visible button, as a person does in setup. Merely
+/// setting Runtime.evaluate's userGesture flag does not reset that limit.
+/// This stays in the probe; the shipping app retains the browser's policy.
+#[cfg(windows)]
+fn click_download(window: &tauri::WebviewWindow, kind: &str) {
+    let parameters = serde_json::json!({
+        "expression": format!("(() => {{ const r = document.getElementById({}).getBoundingClientRect(); return {{x: r.x + r.width / 2, y: r.y + r.height / 2}}; }})()", serde_json::to_string(&format!("probe-{kind}")).unwrap()),
+        "returnByValue": true,
+    }).to_string();
+    window
+        .with_webview(move |view| unsafe {
+            use windows::core::HSTRING;
+            let core = view.controller().CoreWebView2().unwrap();
+            let click_core = core.clone();
+            let positioned = webview2_com::CallDevToolsProtocolMethodCompletedHandler::create(
+                Box::new(move |status, result| {
+                    status?;
+                    let result: serde_json::Value =
+                        serde_json::from_str(&result).expect("probe button bounds result");
+                    let point = &result["result"]["value"];
+                    let x = point["x"].as_f64().expect("probe button x");
+                    let y = point["y"].as_f64().expect("probe button y");
+                    let event = |kind| {
+                        serde_json::json!({"type":kind,"x":x,"y":y,"button":"left","clickCount":1})
+                            .to_string()
+                    };
+                    let release_core = click_core.clone();
+                    let release = event("mouseReleased");
+                    let pressed = webview2_com::CallDevToolsProtocolMethodCompletedHandler::create(
+                        Box::new(move |status, _| {
+                            status?;
+                            release_core.CallDevToolsProtocolMethod(
+                                &HSTRING::from("Input.dispatchMouseEvent"),
+                                &HSTRING::from(release),
+                                None,
+                            )?;
+                            Ok(())
+                        }),
+                    );
+                    click_core.CallDevToolsProtocolMethod(
+                        &HSTRING::from("Input.dispatchMouseEvent"),
+                        &HSTRING::from(event("mousePressed")),
+                        &pressed,
+                    )?;
+                    Ok(())
+                }),
+            );
+            core.CallDevToolsProtocolMethod(
+                &HSTRING::from("Runtime.evaluate"),
+                &HSTRING::from(parameters),
+                &positioned,
+            )
+            .expect("locate the probe download button");
+        })
+        .expect("access the probe webview");
+}
 
 #[tauri::command]
 fn runtime_status() -> String {
@@ -47,8 +128,13 @@ fn serve(listener: TcpListener, respond: impl Fn(&str) -> String + Send + 'stati
             let request = String::from_utf8_lossy(&bytes[..size]);
             let path = request.split_whitespace().nth(1).unwrap_or("/");
             let body = respond(path);
+            let content_type = if path == "/download" {
+                "application/octet-stream\r\nContent-Disposition: attachment; filename=instance_config.yaml"
+            } else {
+                "text/html"
+            };
             let response = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                 body.len(),
                 body
             );
@@ -58,6 +144,9 @@ fn serve(listener: TcpListener, respond: impl Fn(&str) -> String + Send + 'stati
 }
 
 fn main() {
+    let download_dir = tempfile::tempdir().unwrap();
+    DOWNLOAD_DIR.set(download_dir.path().to_path_buf()).unwrap();
+    universal_agents_desktop_lib::webview::use_save_destination(save_download);
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let broker = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -79,7 +168,9 @@ fn main() {
     });
 
     serve(listener, move |path| {
-        if path.starts_with("/event") {
+        if path == "/download" {
+            "fixture: config\n".into()
+        } else if path.starts_with("/event") {
             println!("Popup event: {path}");
             "ok".into()
         } else if path.starts_with("/broker-result") {
@@ -116,7 +207,11 @@ fn main() {
                 .into()
         } else {
             format!(
-                r#"<h1>Native popup smoke test</h1><script>
+                r#"<h1>Native popup smoke test</h1>
+            <button id="probe-http" onclick="window.uaSmokeDownload('http')">HTTP download</button>
+            <button id="probe-blob" onclick="window.uaSmokeDownload('blob')">Blob download</button>
+            <button id="probe-cancel" onclick="window.uaSmokeDownload('cancel')">Cancel download</button>
+            <script>
             document.cookie = 'ua_smoke=shared; path=/';
             function clickBlank(href) {{
               let link = document.createElement('a');
@@ -136,8 +231,25 @@ fn main() {
               }}, 2500);
               setTimeout(() => clickBlank('http://127.0.0.1:{broker_port}/credential-collection/smoke'), 4000);
               setTimeout(() => clickBlank('{EXTERNAL_URL}'), 5500);
+              function download(href, name) {{
+                const link = document.createElement('a');
+                link.href = href; link.download = name;
+                document.body.append(link); link.click(); link.remove();
+              }}
+              window.uaSmokeDownload = (kind) => {{
+                fetch('/event?download=' + kind);
+                if (kind === 'http') download('/download', 'instance_config.yaml');
+                if (kind === 'blob') download(URL.createObjectURL(new Blob(['FIXTURE=only\n'], {{type: 'text/plain'}})), 'team.env');
+                if (kind === 'cancel') download(URL.createObjectURL(new Blob(['cancel me'], {{type: 'text/plain'}})), 'cancel.txt');
+              }};
+              if (!{native_gestures}) {{
+                setTimeout(() => window.uaSmokeDownload('http'), 7000);
+                setTimeout(() => window.uaSmokeDownload('blob'), 9000);
+                setTimeout(() => window.uaSmokeDownload('cancel'), 11000);
+              }}
             }}, 800);
-            </script>"#
+            </script>"#,
+                native_gestures = cfg!(windows),
             )
         }
     });
@@ -146,7 +258,13 @@ fn main() {
     let mut context = tauri::generate_context!();
     context.config_mut().app.windows.clear();
     tauri::Builder::default()
+        .plugin(tauri_plugin_log::Builder::new()
+            .level(log::LevelFilter::Debug)
+            .targets([tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout)
+                .filter(|metadata| metadata.target().starts_with("universal_agents_desktop"))])
+            .build())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![runtime_status])
         .setup(move |app| {
             universal_agents_desktop_lib::webview::build_runtime_window(
@@ -158,7 +276,27 @@ fn main() {
             .unwrap();
             let handle = app.handle().clone();
             std::thread::spawn(move || {
-                for _ in 0..450 {
+                for tick in 0..450 {
+                    #[cfg(windows)]
+                    if let Some(kind) = match tick {
+                        80 => Some("http"),
+                        100 => Some("blob"),
+                        120 => Some("cancel"),
+                        _ => None,
+                    } {
+                        let window = handle.get_webview_window("webchat-smoke").unwrap();
+                        click_download(&window, kind);
+                    }
+                    #[cfg(not(windows))]
+                    let _ = tick;
+                    for (name, expected, bit) in [
+                        ("instance_config.yaml", "fixture: config\n", HTTP_DOWNLOAD),
+                        ("team.env", "FIXTURE=only\n", BLOB_DOWNLOAD),
+                    ] {
+                        if std::fs::read_to_string(DOWNLOAD_DIR.get().unwrap().join(name)).ok().as_deref() == Some(expected) {
+                            PASSED.fetch_or(bit, Ordering::SeqCst);
+                        }
+                    }
                     if PASSED.load(Ordering::SeqCst) == ALL {
                         // Give the empty window from the external link time to close.
                         std::thread::sleep(Duration::from_millis(1500));
@@ -174,7 +312,7 @@ fn main() {
                             std::process::exit(1);
                         }
                         println!(
-                            "PASS: same-origin and deferred popups share cookies and deny desktop commands; the broker form opens in an app window; external links leave no empty window"
+                            "PASS: popups share cookies and deny desktop commands; broker and external links follow policy; HTTP and blob downloads save exact contents and cancellation is handled"
                         );
                         handle.exit(0);
                         return;

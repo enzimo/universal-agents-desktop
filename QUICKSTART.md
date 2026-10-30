@@ -86,14 +86,19 @@ Keep Gatekeeper and SmartScreen enabled.
 2. Under **Agent Workspace**, optionally choose a folder agents may read and
    change. Everyone on your UA team can use this shared folder. With Colima,
    choose a folder inside your home folder. Otherwise keep the app-managed folder.
-3. Choose **Install & start**. Leave the launcher open while it downloads the
-   runtime image; the first download can take several minutes. On later starts,
-   this button reads **Start**. Public images need no registry sign-in; leave
+3. The launcher checks Docker and starts UA automatically. Leave it open while
+   the progress row shows the current stage and download sizes; the first
+   download can take several minutes. If startup needs a retry, choose
+   **Install & start**, or **Start** on later launches. Public images need no registry sign-in; leave
    **Private Image Access** closed unless you use a private image.
 4. When the launcher says **Setup ready**, choose **Open in app**. **Open in browser**
    opens the same setup in your browser.
 
 ## 4. Complete the setup pages
+
+Configuration downloads inside the app open a native save dialog. Choose a
+destination for each file, or cancel to discard it. A download or save failure
+shows an error; **Open in browser** offers the same setup as an alternative.
 
 Follow the pages shown in the video:
 

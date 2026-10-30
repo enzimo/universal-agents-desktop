@@ -148,6 +148,9 @@ fn main() {
             };
             let response = match command {
                 "desktop_version" => json!(env!("CARGO_PKG_VERSION")),
+                "startup_progress" => json!({"active": false, "update": {
+                    "message": "Startup check finished.", "current_bytes": null, "total_bytes": null
+                }, "error": null}),
                 "keep_awake_hint" => json!("UI fixture sleep setting hint"),
                 "runtime_status" | "start_runtime" | "restart_runtime" | "stop_runtime"
                 | "install_runtime_update" => json!({
@@ -159,7 +162,7 @@ fn main() {
                 }),
                 "integration_status" | "set_unlisted_runtime_offers" => json!({
                     "workspace_dir": "UI fixture workspace", "workspace_available": true,
-                    "workspace_is_external": false, "workspace_issue": null,
+                    "workspace_is_external": false, "workspace_openable": true, "workspace_issue": null,
                     "openai_subscription_state": "disconnected",
                     "openai_subscription_detail": "UI fixture: no credentials are read.",
                     "pending_codex_auth_file": null,
