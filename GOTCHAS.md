@@ -48,6 +48,13 @@
 
 ## Self-hosted Windows script policy
 
+GitHub event JSON is UTF-8, including PR titles and descriptions. Installed
+runner hooks must read it with `encoding="utf-8"`; a Windows legacy default
+such as CP1252 can reject smart quotes before checkout or tests begin. Updating
+the repository copy alone does not update the installed hook. After moving a
+runner, also verify that its installed hook's runner and work paths match the
+active runner before allowing cleanup of the new directory.
+
 Windows PowerShell may default to Restricted execution policy even when the runner starts successfully. The manual Windows workflow uses `-ExecutionPolicy Bypass` for its own PowerShell process so GitHub's generated step scripts can run. It retains terminating-error behavior and explicit native exit-code checks, and does not change the machine or user execution policy.
 
 The GUI probe timed out on deferred popup navigation when launched directly by the runner, while the same binary passed as a normal interactive user. The Windows workflow uses a temporary, limited-privilege interactive task under the runner account for this probe. Keep that account signed into the desktop. The task is removed afterward; unit tests and packaging run directly in the runner.

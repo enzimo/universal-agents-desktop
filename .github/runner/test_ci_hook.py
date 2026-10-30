@@ -54,6 +54,20 @@ class LifecycleTests(unittest.TestCase):
         ci_hook.begin(self.config)
         return json.loads((self.state / "job.json").read_text())
 
+    def test_event_json_uses_utf8_even_with_a_windows_default_encoding(self):
+        self.event.write_text(json.dumps({
+            "repository": {"private": False, "full_name": "enzimo/universal-agents"},
+            "pull_request_text": "\u201cChecking\u201d",
+        }, ensure_ascii=False), encoding="utf-8")
+        original_read_text = Path.read_text
+
+        def windows_read_text(path, *args, **kwargs):
+            kwargs.setdefault("encoding", "cp1252")
+            return original_read_text(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", windows_read_text):
+            self.begin()
+
     def test_completion_removes_job_outputs_but_preserves_neighbor_and_account(self):
         self.begin()
         (self.workspace / "target").mkdir()
