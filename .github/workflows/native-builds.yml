@@ -41,7 +41,7 @@ jobs:
             label: Windows x64
             artifact: windows-x64
             timeout_minutes: 90
-          - runner: [self-hosted, Linux, X64, ua-build, ua-linux]
+          - runner: [self-hosted, Linux, X64, ua-heavy, ua-linux]
             shell: rtk proxy bash --noprofile --norc -e -o pipefail {0}
             label: Linux x64
             artifact: linux-x64

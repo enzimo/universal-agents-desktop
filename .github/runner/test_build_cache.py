@@ -21,7 +21,7 @@ class CacheTests(unittest.TestCase):
             "state": str(state), "work": str(self.work), "min_free_gib": 0,
             "repositories": ["owner/desktop", "owner/runtime"],
             "build_cache": {"max_bytes": 10000, "max_age_days": 7,
-                            "sccache": "/tools/sccache", "server_port": 48227},
+                            "sccache": "/tools/sccache", "server_port": 48227, "compiler_gib": 3},
         }
         self.env = patch.dict(os.environ, {
             "GITHUB_REPOSITORY": "owner/desktop", "GITHUB_REF": "refs/heads/main",
@@ -56,7 +56,8 @@ class CacheTests(unittest.TestCase):
     def test_total_budget_evicts_oldest_scope_and_keeps_neighbor(self):
         _, old = self.prepare()
         metadata = old / "entry.json"
-        row = json.loads(metadata.read_text()); row["last_used"] -= 60
+        row = json.loads(metadata.read_text())
+        row["last_used"] -= 60
         metadata.write_text(json.dumps(row))
         (old / "compiler" / "data").write_bytes(b"x" * 6000)
         os.environ["GITHUB_REF"] = "refs/heads/feature"
@@ -72,7 +73,8 @@ class CacheTests(unittest.TestCase):
     def test_expiry_and_oversized_single_entry(self):
         _, path = self.prepare()
         metadata = path / "entry.json"
-        row = json.loads(metadata.read_text()); row["last_used"] -= 8 * 86400
+        row = json.loads(metadata.read_text())
+        row["last_used"] -= 8 * 86400
         metadata.write_text(json.dumps(row))
         build_cache.prune(self.config, ci_hook.remove)
         self.assertFalse(path.exists())
@@ -85,6 +87,15 @@ class CacheTests(unittest.TestCase):
         _, path = self.prepare()
         with patch.object(build_cache, "low_disk", return_value=True):
             build_cache.prune(self.config, ci_hook.remove)
+        self.assertFalse(path.exists())
+
+    def test_image_blobs_share_the_retention_budget_and_compiler_limit_is_configured(self):
+        self.config["build_cache"]["compiler_gib"] = 8
+        env, path = self.prepare()
+        self.assertEqual(env["SCCACHE_CACHE_SIZE"], "8G")
+        self.assertEqual(Path(env["UA_CI_IMAGE_CACHE"]), path / "buildkit")
+        (path / "buildkit" / "large-layer").write_bytes(b"x" * 11000)
+        build_cache.prune(self.config, ci_hook.remove)
         self.assertFalse(path.exists())
 
     def test_long_paths_are_counted_in_the_budget(self):
@@ -103,19 +114,37 @@ class CacheTests(unittest.TestCase):
 
     def test_unknown_root_is_not_adopted(self):
         path = Path(self.config["state"]).parent / "build-cache-v1"
-        path.mkdir(); (path / "personal").write_text("keep")
+        path.mkdir()
+        (path / "personal").write_text("keep")
         with self.assertRaises(ValueError):
             self.prepare()
         self.assertEqual((path / "personal").read_text(), "keep")
 
+    def test_file_browser_metadata_is_removed_and_other_files_still_stop_the_job(self):
+        # A .DS_Store in the cache root stopped the macOS release build (v0.8.4).
+        _, path = self.prepare()
+        root = path.parent
+        for name in (".DS_Store", "._entry", "Thumbs.db", "desktop.ini"):
+            (root / name).write_text("finder")
+        with self.assertLogs("ua.ci.cache", "WARNING") as logs:
+            build_cache.prune(self.config, ci_hook.remove)
+        self.assertEqual(len(logs.records), 4)
+        self.assertEqual(sorted(item.name for item in root.iterdir()), sorted([".owner", path.name]))
+        (root / "notes.txt").write_text("keep")
+        with self.assertRaisesRegex(ValueError, "Unexpected file"):
+            build_cache.prune(self.config, ci_hook.remove)
+        self.assertEqual((root / "notes.txt").read_text(), "keep")
+
     def test_npx_environment_is_disposable_but_downloads_are_retained(self):
         _, path = self.prepare()
         downloads = path / "npm" / "_cacache"
-        downloads.mkdir(); (downloads / "tarball").write_text("download")
+        downloads.mkdir()
+        (downloads / "tarball").write_text("download")
         execution = path / "npm" / "_npx" / "package" / "node_modules" / ".bin"
         execution.mkdir(parents=True)
         outside = self.path / "personal"
-        outside.mkdir(); (outside / "keep").write_text("keep")
+        outside.mkdir()
+        (outside / "keep").write_text("keep")
         if os.name != "nt":
             (execution / "tauri").symlink_to(outside, target_is_directory=True)
         else:
@@ -129,7 +158,8 @@ class CacheTests(unittest.TestCase):
     def test_link_escape_is_rejected_without_touching_target(self):
         _, path = self.prepare()
         outside = self.path / "personal"
-        outside.mkdir(); (outside / "keep").write_text("keep")
+        outside.mkdir()
+        (outside / "keep").write_text("keep")
         (path / "pip" / "escape").symlink_to(outside, target_is_directory=True)
         with self.assertRaises(ValueError):
             build_cache.prune(self.config, ci_hook.remove)
