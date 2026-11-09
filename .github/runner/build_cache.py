@@ -13,16 +13,42 @@ import os
 import shutil
 import socket
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
 LOG = logging.getLogger("ua.ci.cache")
 OWNER = "universal-agents-ci-build-cache-v1"
+# Files a desktop's file browser leaves in any folder someone opens: macOS
+# Finder's .DS_Store and ._ resource forks, Windows Explorer's Thumbs.db and
+# desktop.ini. A .DS_Store in the cache root stopped the macOS release build
+# (v0.8.4, 2026-10-09). They hold no cache data, so cleanup removes them with
+# a warning; any other unexpected file in the root still stops the job.
+DESKTOP_METADATA_FILES = frozenset({".DS_Store", "Thumbs.db", "desktop.ini"})
+
+
+def is_desktop_metadata(path: Path) -> bool:
+    return path.name in DESKTOP_METADATA_FILES or path.name.startswith("._")
 
 
 def reject_link(path: Path) -> None:
     if path.is_symlink() or path.is_junction():
         raise ValueError(f"Links are not allowed in the managed build cache: {path}")
+
+
+def write_json(path: Path, value: dict) -> None:
+    """Publish complete metadata even if a writer is interrupted."""
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
+                                     prefix=path.name + ".", delete=False) as stream:
+        temporary = Path(stream.name)
+        try:
+            json.dump(value, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+            stream.close()
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
 
 
 def root(config: dict) -> Path:
@@ -77,6 +103,12 @@ def entries(config: dict, remove) -> list[tuple[Path, dict, int]]:
         if path.name == ".owner":
             continue
         reject_link(path)
+        if not path.is_dir():
+            if is_desktop_metadata(path):
+                LOG.warning("Removed a file browser's metadata file from the build cache: %s", path)
+                path.unlink()
+                continue
+            raise ValueError(f"Unexpected file in the managed build cache: {path}")
         metadata = path / "entry.json"
         reject_link(metadata)
         row = json.loads(metadata.read_text())
@@ -121,10 +153,10 @@ def prepare(config: dict) -> dict[str, str]:
     path = root(config) / key(repository, cache_scope)
     reject_link(path)
     path.mkdir(exist_ok=True)
-    (path / "entry.json").write_text(json.dumps({
+    write_json(path / "entry.json", {
         "repository": repository, "scope": cache_scope, "last_used": time.time(),
-    }))
-    for name in ("compiler", "pip", "npm"):
+    })
+    for name in ("compiler", "pip", "npm", "buildkit"):
         (path / name).mkdir(exist_ok=True)
     state = Path(config["state"])
     # An empty job-owned config prevents loading personal/remote cache settings.
@@ -135,11 +167,13 @@ def prepare(config: dict) -> dict[str, str]:
         "RUSTC_WRAPPER": config["build_cache"]["sccache"],
         "SCCACHE_CONF": str(conf),
         "SCCACHE_DIR": str(path / "compiler"),
-        "SCCACHE_CACHE_SIZE": "3G",
+        "SCCACHE_CACHE_SIZE": f"{config['build_cache']['compiler_gib']}G",
         "SCCACHE_IDLE_TIMEOUT": "0",
         "SCCACHE_CACHED_CONF": str(state / "cache" / "sccache-state"),
         "PIP_CACHE_DIR": str(path / "pip"),
         "npm_config_cache": str(path / "npm"),
+        "UA_CI_IMAGE_CACHE_VERSION": "1",
+        "UA_CI_IMAGE_CACHE": str(path / "buildkit"),
     }
     if os.name == "nt":
         env["SCCACHE_SERVER_PORT"] = str(config["build_cache"]["server_port"])
