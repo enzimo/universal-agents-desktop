@@ -61,7 +61,7 @@ Windows PowerShell may default to Restricted execution policy even when the runn
 
 The GUI probe timed out on deferred popup navigation when launched directly by the runner, while the same binary passed as a normal interactive user. The Windows workflow uses a temporary, limited-privilege interactive task under the runner account for this probe. Keep that account signed into the desktop. The task is removed afterward; unit tests and packaging run directly in the runner.
 
-- On persistent runners, installing a Rust target for `1.95.0` does not install it for a separately named `stable` toolchain. Set `RUSTUP_TOOLCHAIN=1.95.0` for direct universal builds.
+- On persistent runners, installing a Rust target for `1.100.0` does not install it for a separately named `stable` toolchain. Set `RUSTUP_TOOLCHAIN=1.100.0` for direct universal builds.
 - Local workflows require the installed cleanup hooks. A label alone does not make a runner ready. Hooks use system Python and RTK outside the disposable work directory. See `docs/LOCAL_CI.md`.
 - The local Linux builder uses Ubuntu 24.04. Its packages have that userspace baseline; Ubuntu 22.04 package compatibility is not verified.
 

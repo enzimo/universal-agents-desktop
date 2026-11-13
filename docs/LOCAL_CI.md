@@ -33,7 +33,7 @@ runner processes. Keep the native Windows runner in the signed-in account so
 the existing interactive WebView probes can execute.
 
 Provision RTK 0.48.0, system Python 3.12 or newer, Node.js 22 or newer, Git,
-Rust 1.95.0 with rustfmt and Clippy, and the platform's Tauri prerequisites.
+Rust 1.100.0 with rustfmt and Clippy, and the platform's Tauri prerequisites.
 Jobs select the toolchain through `RUSTUP_TOOLCHAIN` and install components with
 `--no-self-update`, leaving the account's default toolchain unchanged.
 Runtime sidecar jobs install Node.js 24.20.0. Runtime jobs install Python 3.12
@@ -42,7 +42,7 @@ The Actions runner must support the Node runtime used by the pinned actions;
 leave runner auto-update enabled.
 
 On macOS install both `aarch64-apple-darwin` and `x86_64-apple-darwin` under
-Rust 1.95.0. Set `RUSTUP_TOOLCHAIN=1.95.0` for direct builds. Put Apple's system
+Rust 1.100.0. Set `RUSTUP_TOOLCHAIN=1.100.0` for direct builds. Put Apple's system
 tools before Homebrew on PATH, then include Cargo and Homebrew explicitly.
 In particular Tauri must find `/usr/bin/xattr`. Universal packaging verifies
 both architectures compile; execution tests on this host cover ARM64 only.
