@@ -61,7 +61,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Ensure pinned Rust toolchain
-        run: rustup toolchain install 1.95.0 --profile minimal --no-self-update --component clippy
+        run: rustup toolchain install 1.100.0 --profile minimal --no-self-update --component clippy
       - name: Check provisioned Linux dependencies
         if: runner.os == 'Linux'
         run: pkg-config --modversion webkit2gtk-4.1

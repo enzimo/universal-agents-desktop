@@ -37,7 +37,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Ensure pinned Rust toolchain
-        run: rustup toolchain install 1.95.0 --profile minimal --no-self-update --component rustfmt,clippy
+        run: rustup toolchain install 1.100.0 --profile minimal --no-self-update --component rustfmt,clippy
       - name: Test runner resource lifecycle
         run: python3 -m unittest discover -s .github/runner -v
       - name: Check formatting
@@ -63,7 +63,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Ensure pinned Rust toolchain
-        run: rustup toolchain install 1.95.0 --profile minimal --no-self-update --target aarch64-apple-darwin,x86_64-apple-darwin
+        run: rustup toolchain install 1.100.0 --profile minimal --no-self-update --target aarch64-apple-darwin,x86_64-apple-darwin
       - name: Test workspace
         run: cargo test --workspace --locked
       - name: Compile universal application on pull requests
@@ -73,7 +73,7 @@ jobs:
         if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.package)
         env:
           APPLE_SIGNING_IDENTITY: "-"
-        run: PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH" RUSTUP_TOOLCHAIN=1.95.0 node .github/scripts/tauri-build.cjs --target universal-apple-darwin --bundles app,dmg
+        run: PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH" RUSTUP_TOOLCHAIN=1.100.0 node .github/scripts/tauri-build.cjs --target universal-apple-darwin --bundles app,dmg
       - name: Verify universal binary and ad-hoc signature
         if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.package)
         run: |
